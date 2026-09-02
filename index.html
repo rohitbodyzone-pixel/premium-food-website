@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BURGER & CO. | Best Handcrafted Burgers, Toasties & Shakes</title>
+    <meta name="description" content="Order the best handcrafted burgers, ciabatta toasties, loaded fries, and thickshakes. 100% pure fresh beef, artisan brioche, and local ingredients. Express pickup and delivery.">
+
+    <!-- Google Fonts: Bangers (Display), Oswald (Headings), Plus Jakarta Sans (Body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Oswald:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- CSS Modules -->
+    <link rel="stylesheet" href="css/luxury-food.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ==========================================
+         HEADER / NAVIGATION (Clean Restaurant Bar)
+         ========================================== -->
+    <header class="main-header">
+        <div class="container nav-container">
+            <!-- Brand Logo -->
+            <a href="#home" class="brand-logo-link" data-view="home" aria-label="BURGER & CO. Home">
+                <div class="brand-logo-badge">B</div>
+                <div class="brand-logo-text">BURGER <span>& CO.</span></div>
+            </a>
+
+            <!-- Desktop Nav Menu -->
+            <nav>
+                <ul class="nav-menu">
+                    <li><a href="#home" class="nav-item-link active" data-view="home">Home</a></li>
+                    <li><a href="#menu" class="nav-item-link" data-view="menu">Menu</a></li>
+                    <li><a href="#story" class="nav-item-link" data-view="story">Our Story</a></li>
+                    <li><a href="#stores" class="nav-item-link" data-view="stores">Stores</a></li>
+                    <li><a href="#contact" class="nav-item-link" data-view="contact">Contact</a></li>
+                </ul>
+            </nav>
+
+            <!-- Nav Actions -->
+            <div class="nav-actions">
+                <!-- Cart Button -->
+                <button class="header-cart-btn btn-open-cart" onclick="window.cart ? window.cart.openDrawer() : null" aria-label="Open Cart">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span>Cart</span>
+                    <span id="nav-cart-count" class="cart-count-pill" style="display: none;">0</span>
+                </button>
+
+                <!-- Order Now Button -->
+                <a href="#menu" class="btn-order-header" data-view="menu">
+                    <svg viewBox="0 0 170 170"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                    <span>Order Now</span>
+                </a>
+
+                <!-- Mobile Hamburger Toggle -->
+                <button id="mobile-menu-toggle" class="mobile-toggle-btn" aria-label="Toggle navigation">
+                    <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Mobile Navigation Drawer -->
+    <div id="mobile-nav-drawer" class="mobile-nav-drawer">
+        <a href="#home" class="mobile-nav-link active" data-view="home">Home</a>
+        <a href="#menu" class="mobile-nav-link" data-view="menu">Menu</a>
+        <a href="#story" class="mobile-nav-link" data-view="story">Our Story</a>
+        <a href="#stores" class="mobile-nav-link" data-view="stores">Stores</a>
+        <a href="#contact" class="mobile-nav-link" data-view="contact">Contact</a>
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <a href="#menu" class="btn-red-pill" data-view="menu" style="font-size: 1.2rem; padding: 0.9rem 2.5rem;">
+                Order Online Now
+            </a>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         PAGE VIEW 1: HOME
+         ========================================== -->
+    <div id="view-home" class="page-view active-view">
+        <!-- 1. HERO BANNER -->
+        <section class="hero-banner-wrap" style="padding: 0;">
+            <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1920&q=85" alt="Juicy Gourmet Burgers Stacked" class="hero-banner-image">
+            <div class="hero-overlay-content">
+                <div class="container">
+                    <div class="hero-headline-box">
+                        <span class="hero-subtag">★ 100% Pure Fresh Beef • Daily Brioche</span>
+                        <h1 class="hero-main-title">BEST BURGERS <br><span class="text-red">IN TOWN.</span></h1>
+                        <p class="hero-description">Handcrafted fresh to order with locally sourced Canterbury beef, melted aged cheddar, secret signature sauces, and golden seasoned fries.</p>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <a href="#menu" class="btn-red-pill" data-view="menu">
+                                <svg width="14" height="14" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                                <span>Order Online</span>
+                            </a>
+                            <a href="#menu" class="btn-outline-pill" data-view="menu">Explore Menu</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Floating Bottom Strip -->
+                <div class="hero-bottom-order-strip">
+                    <span class="hero-strip-text">Let's order for <strong>Delivery or Pick-up</strong></span>
+                    <a href="#menu" class="btn-strip-order" data-view="menu">
+                        <svg width="12" height="12" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                        <span>Order Now</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. PROMOTIONAL 3-BANNER SECTION -->
+        <section class="promo-banners-section">
+            <div class="container">
+                <div class="promo-banners-grid">
+                    <!-- Banner 1 -->
+                    <a href="#menu" class="promo-banner-card" data-view="menu" data-category-target="toasties">
+                        <img src="https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=800&q=80" alt="Freshly Made Toasties" class="promo-banner-bg" loading="lazy">
+                        <div class="promo-banner-overlay"></div>
+                        <div class="promo-banner-content">
+                            <span class="promo-banner-badge">Hot & Crispy</span>
+                            <h3 class="promo-banner-title">Freshly Made Ciabatta Toasties</h3>
+                            <span class="promo-banner-cta">Order Now &rarr;</span>
+                        </div>
+                    </a>
+
+                    <!-- Banner 2 -->
+                    <a href="#menu" class="promo-banner-card" data-view="menu" data-category-target="gourmet-burgers">
+                        <img src="https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80" alt="Epic Burger Deals" class="promo-banner-bg" loading="lazy">
+                        <div class="promo-banner-overlay"></div>
+                        <div class="promo-banner-content">
+                            <span class="promo-banner-badge">Epic Deals</span>
+                            <h3 class="promo-banner-title">Savor the Flavor with Monster Combos</h3>
+                            <span class="promo-banner-cta">View Deals &rarr;</span>
+                        </div>
+                    </a>
+
+                    <!-- Banner 3 -->
+                    <a href="#menu" class="promo-banner-card" data-view="menu" data-category-target="all">
+                        <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80" alt="Full Restaurant Menu" class="promo-banner-bg" loading="lazy">
+                        <div class="promo-banner-overlay"></div>
+                        <div class="promo-banner-content">
+                            <span class="promo-banner-badge">Chef Selection</span>
+                            <h3 class="promo-banner-title">Explore Our Handcrafted Menu</h3>
+                            <span class="promo-banner-cta">Browse All &rarr;</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. OUR CATEGORIES SECTION -->
+        <section class="categories-section">
+            <div class="container">
+                <div class="category-header-wrap">
+                    <h2 class="category-main-title">OUR CATEGORIES</h2>
+                    <div class="category-underline-decor"></div>
+                </div>
+
+                <div id="home-categories-grid" class="category-cards-grid">
+                    <!-- Dynamic rendering by app.js -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. MAIN FOOD INTRO SECTION ("Get the Best Burgers") -->
+        <section class="home-about-section">
+            <div class="container">
+                <div class="home-about-grid">
+                    <!-- Left Col -->
+                    <div class="about-col-left">
+                        <span class="about-restaurant-tag">BURGER & CO.</span>
+                        <h2 class="about-main-heading">Get the Best Burgers in Town</h2>
+                        <a href="#menu" class="btn-red-pill" data-view="menu">
+                            <svg width="12" height="12" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                            <span>Order Now</span>
+                        </a>
+                    </div>
+
+                    <!-- Center Burger Graphic -->
+                    <div class="about-col-center">
+                        <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=85" alt="Signature Burger Masterpiece" class="about-burger-hero-img" loading="lazy">
+                    </div>
+
+                    <!-- Right Col -->
+                    <div class="about-col-right">
+                        <a href="#menu" class="btn-red-pill" data-view="menu" style="background: var(--color-primary);">
+                            <svg width="12" height="12" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                            <span>Menu</span>
+                        </a>
+                        <p class="about-story-text">
+                            BURGER & CO. was created with a passion for good old fashioned handcrafted burgers. A simple, handmade fresh, 100% local burger experience crafted with premium cuts, fresh brioche baked daily, and rich scratch-made sauces.
+                        </p>
+                        <a href="#story" class="btn-outline-pill" data-view="story">More About Us &rarr;</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. APP DOWNLOAD / FAST ORDERING SECTION -->
+        <section class="app-download-section">
+            <div class="container">
+                <div class="app-download-banner-box">
+                    <div class="app-box-img-wrap">
+                        <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=80" alt="Customer Enjoying Burger" class="app-box-img" loading="lazy">
+                    </div>
+                    <div class="app-box-content">
+                        <h2 class="app-box-title">Order Delicious Burgers Delivered Hot</h2>
+                        <p class="app-box-desc">Download our app or order directly online to unlock exclusive combo deals, real-time live tracker, and express zero-wait pickup.</p>
+                        <div class="app-store-badges-row">
+                            <a href="#menu" class="app-store-btn" data-view="menu">
+                                <span>📱 Order Online Now</span>
+                            </a>
+                            <a href="https://play.google.com" target="_blank" rel="noopener" class="app-store-btn">
+                                <span>Google Play</span>
+                            </a>
+                            <a href="https://apple.com/app-store" target="_blank" rel="noopener" class="app-store-btn">
+                                <span>App Store</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. "YOUR FAVOURITES IN MINUTES" & NEWSLETTER -->
+        <section class="footer-promo-section">
+            <div class="container">
+                <div class="footer-promo-grid">
+                    <!-- Col 1 -->
+                    <div class="promo-col-favourites">
+                        <h2 class="promo-fav-title">Your Favourites in Minutes</h2>
+                        <a href="#menu" class="btn-red-pill" data-view="menu">
+                            <svg width="12" height="12" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                            <span>Order Now</span>
+                        </a>
+                    </div>
+
+                    <!-- Col 2: Image -->
+                    <div class="promo-col-delivery-img">
+                        <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=600&q=80" alt="Express Burger Delivery" class="delivery-hero-img" loading="lazy">
+                    </div>
+
+                    <!-- Col 3: Newsletter Form -->
+                    <div class="promo-col-newsletter">
+                        <span class="newsletter-tag">Subscribe Newsletter</span>
+                        <h3 class="newsletter-heading">Be the First to Know About Deals</h3>
+                        <form class="newsletter-form-fields">
+                            <input type="text" class="news-input" placeholder="Enter Your Name" required>
+                            <input type="tel" class="news-input" placeholder="Mobile Phone">
+                            <input type="email" class="news-input" placeholder="Email Address" required>
+                            <button type="submit" class="btn-news-submit">Submit</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==========================================
+         PAGE VIEW 2: FULL MENU
+         ========================================== -->
+    <div id="view-menu" class="page-view">
+        <section class="menu-page-header">
+            <div class="container">
+                <div class="section-title-wrap" style="margin-bottom: 2rem;">
+                    <h1 class="section-main-heading">EXPLORE OUR MENU</h1>
+                    <p class="section-sub-heading">Freshly prepared handcrafted burgers, ciabatta toasties, sides, desserts, and shakes.</p>
+                </div>
+
+                <!-- Pickup / Delivery Selector -->
+                <div class="pickup-delivery-selector-card">
+                    <div class="order-mode-toggle">
+                        <button type="button" class="mode-btn active" data-mode="pickup">Pickup</button>
+                        <button type="button" class="mode-btn" data-mode="delivery">Delivery</button>
+                    </div>
+
+                    <div id="pickup-mode-fields" class="mode-selector-fields">
+                        <label for="pickup-store-select" style="font-weight: 700; white-space: nowrap; font-size: 0.9rem;">Pickup Store:</label>
+                        <select id="pickup-store-select" class="mode-select-input">
+                            <option value="Downtown Central Flagship">Downtown Central Flagship (142 High St)</option>
+                            <option value="Riverside Promenade">Riverside Promenade (88 Riverside Blvd)</option>
+                            <option value="Lincoln Road Station">Lincoln Road Station (204 Lincoln Rd)</option>
+                        </select>
+                    </div>
+
+                    <div id="delivery-mode-fields" class="mode-selector-fields" style="display: none;">
+                        <label for="delivery-address-input" style="font-weight: 700; white-space: nowrap; font-size: 0.9rem;">Delivery To:</label>
+                        <input type="text" id="delivery-address-input" class="mode-select-input" placeholder="Enter your delivery street address...">
+                    </div>
+
+                    <div style="flex: 1; min-width: 240px;">
+                        <input type="text" id="menu-search-input" class="mode-select-input" style="width: 100%;" placeholder="🔍 Search burgers, fries, drinks...">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sticky Category Navigation Bar -->
+        <div class="menu-category-nav-bar">
+            <div class="container">
+                <div id="menu-category-tabs" class="menu-cat-scroll-row">
+                    <!-- Dynamic rendering by app.js -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Items Grid -->
+        <section class="menu-items-section">
+            <div class="container">
+                <div id="menu-items-grid" class="menu-items-grid">
+                    <!-- Dynamic rendering by app.js -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==========================================
+         PAGE VIEW 3: OUR STORY
+         ========================================== -->
+    <div id="view-story" class="page-view">
+        <section class="story-page-section">
+            <div class="container">
+                <div class="story-hero-banner">
+                    <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1600&q=85" alt="Burger & Co. Kitchen Craft">
+                    <div class="story-hero-text">
+                        <span class="hero-subtag">Our Heritage</span>
+                        <h1 class="hero-main-title">BORN FROM PASSION FOR REAL BURGERS</h1>
+                        <p style="font-size: 1.15rem; color: #f0f0f0;">No shortcuts, no frozen compromises. Just honest, hearty food cooked with passion.</p>
+                    </div>
+                </div>
+
+                <div class="section-title-wrap">
+                    <h2 class="section-main-heading">THE CRAFT BEHIND EVERY BITE</h2>
+                    <p class="section-sub-heading">We believe a truly great burger starts long before it hits the sizzling flat top.</p>
+                </div>
+
+                <div class="story-pillars-grid">
+                    <div class="story-pillar-card">
+                        <img src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80" alt="100% Pure Fresh Beef">
+                        <div class="story-pillar-body">
+                            <h3 style="font-size: 1.5rem; color: var(--color-primary);">100% Pure Fresh Beef</h3>
+                            <p style="color: var(--color-gray-300); font-size: 0.95rem;">Locally sourced Canterbury beef ground fresh daily. Never frozen, perfectly seasoned with coarse sea salt and cracked pepper.</p>
+                        </div>
+                    </div>
+
+                    <div class="story-pillar-card">
+                        <img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80" alt="Daily Baked Brioche">
+                        <div class="story-pillar-body">
+                            <h3 style="font-size: 1.5rem; color: var(--color-primary);">Fresh Daily Brioche</h3>
+                            <p style="color: var(--color-gray-300); font-size: 0.95rem;">Baked fresh every morning by artisan bakers. Pillowy soft, golden butter glazed, and toasted on the grill to lock in the juices.</p>
+                        </div>
+                    </div>
+
+                    <div class="story-pillar-card">
+                        <img src="https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?auto=format&fit=crop&w=600&q=80" alt="Scratch Made Sauces">
+                        <div class="story-pillar-body">
+                            <h3 style="font-size: 1.5rem; color: var(--color-primary);">Secret Signature Sauces</h3>
+                            <p style="color: var(--color-gray-300); font-size: 0.95rem;">From our smoky bacon jam and truffle aioli to fiery Nashville hot honey, all sauces are simmered in small batches in-house.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 4rem;">
+                    <a href="#menu" class="btn-red-pill" data-view="menu" style="font-size: 1.15rem; padding: 0.85rem 2.2rem;">
+                        Taste The Difference • Order Now
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==========================================
+         PAGE VIEW 4: STORES
+         ========================================== -->
+    <div id="view-stores" class="page-view">
+        <section class="stores-page-section">
+            <div class="container">
+                <div class="section-title-wrap">
+                    <h1 class="section-main-heading">FIND YOUR NEAREST STORE</h1>
+                    <p class="section-sub-heading">Visit us in-store for hot flame-grilled dining, or order ahead for express Click & Collect.</p>
+                </div>
+
+                <div id="stores-list-grid" class="stores-list-grid">
+                    <!-- Dynamic rendering by app.js -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==========================================
+         PAGE VIEW 5: CONTACT
+         ========================================== -->
+    <div id="view-contact" class="page-view">
+        <section class="contact-page-section">
+            <div class="container">
+                <div class="section-title-wrap">
+                    <h1 class="section-main-heading">GET IN TOUCH</h1>
+                    <p class="section-sub-heading">Have a question, feedback, or catering enquiry? We would love to hear from you.</p>
+                </div>
+
+                <div class="contact-layout-grid">
+                    <!-- Contact Form -->
+                    <div class="contact-form-box">
+                        <h2 class="contact-form-title">Send Us a Message</h2>
+                        <form id="restaurant-contact-form" class="contact-form-fields">
+                            <input type="text" class="contact-input-field" placeholder="Your Full Name *" required>
+                            <input type="email" class="contact-input-field" placeholder="Email Address *" required>
+                            <input type="tel" class="contact-input-field" placeholder="Mobile Phone Number">
+                            <select class="contact-input-field">
+                                <option value="general">General Enquiry</option>
+                                <option value="catering">Catering & Party Orders</option>
+                                <option value="feedback">Food & Store Feedback</option>
+                                <option value="careers">Join Our Team</option>
+                            </select>
+                            <textarea class="contact-input-field" rows="5" placeholder="Write your message here..." required></textarea>
+                            <button type="submit" class="btn-red-pill" style="align-self: flex-start;">Send Message</button>
+                        </form>
+                    </div>
+
+                    <!-- Contact Details -->
+                    <div class="contact-info-cards-col">
+                        <div class="contact-card-item">
+                            <div class="contact-card-icon">📞</div>
+                            <div>
+                                <h3 style="font-size: 1.25rem; margin-bottom: 0.3rem;">Phone Direct</h3>
+                                <p style="color: var(--color-gray-300); font-size: 0.95rem;">03 666 0134 • Lines open daily 10:30 AM – 10 PM</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-card-item">
+                            <div class="contact-card-icon">✉️</div>
+                            <div>
+                                <h3 style="font-size: 1.25rem; margin-bottom: 0.3rem;">Email Enquiries</h3>
+                                <p style="color: var(--color-gray-300); font-size: 0.95rem;">support@burgerandco.nz • Replies within 24 hours</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-card-item">
+                            <div class="contact-card-icon">📍</div>
+                            <div>
+                                <h3 style="font-size: 1.25rem; margin-bottom: 0.3rem;">Headquarters</h3>
+                                <p style="color: var(--color-gray-300); font-size: 0.95rem;">142 High Street, Downtown Central, Christchurch 8011 NZ</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-card-item">
+                            <div class="contact-card-icon">⏰</div>
+                            <div>
+                                <h3 style="font-size: 1.25rem; margin-bottom: 0.3rem;">Service Hours</h3>
+                                <p style="color: var(--color-gray-300); font-size: 0.95rem;">Monday – Sunday: 11:00 AM – Midnight</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==========================================
+         SLIDE-OUT CART DRAWER
+         ========================================== -->
+    <div id="cart-backdrop" class="cart-drawer-backdrop" onclick="window.cart ? window.cart.closeDrawer() : null"></div>
+    <aside id="cart-drawer" class="cart-drawer" aria-label="Shopping Cart">
+        <!-- Header -->
+        <div class="cart-drawer-header">
+            <h3 class="cart-drawer-title">
+                <span>Your Order</span>
+                <span class="cart-count-pill">0</span>
+            </h3>
+            <button id="cart-close-btn" class="drawer-close-btn" onclick="window.cart ? window.cart.closeDrawer() : null" aria-label="Close cart">&times;</button>
+        </div>
+
+        <!-- Items -->
+        <div id="cart-items-container" class="cart-items-container">
+            <!-- Dynamic Cart Items -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="cart-empty-state" class="cart-empty-state">
+            <div style="font-size: 3rem;">🍔</div>
+            <h4 style="font-size: 1.3rem; color: #fff;">Your Cart is Empty</h4>
+            <p style="font-size: 0.9rem;">Add our mouth-watering burgers, ciabatta toasties, and fries to get started.</p>
+            <button class="btn-red-pill" onclick="window.cart.closeDrawer(); window.restaurantApp.switchPageView('menu');">
+                Browse Menu
+            </button>
+        </div>
+
+        <!-- Footer / Calculations -->
+        <div id="cart-drawer-footer" class="cart-drawer-footer" style="display: none;">
+            <div id="cart-active-promo" style="display: none;"></div>
+
+            <!-- Promo Input -->
+            <form id="cart-promo-form" class="cart-promo-form">
+                <input type="text" id="cart-promo-input" class="cart-promo-input" placeholder="Promo code (e.g. BURGER10, EPICDEAL)">
+                <button type="submit" class="btn-red-pill" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Apply</button>
+            </form>
+
+            <div class="cart-summary-calc">
+                <div class="calc-row">
+                    <span>Subtotal:</span>
+                    <span id="cart-summary-subtotal">$0.00</span>
+                </div>
+                <div id="cart-summary-discount-row" class="calc-row" style="display: none; color: #4caf50;">
+                    <span>Discount:</span>
+                    <span id="cart-summary-discount">-$0.00</span>
+                </div>
+                <div class="calc-row">
+                    <span>Estimated GST (15%):</span>
+                    <span id="cart-summary-tax">$0.00</span>
+                </div>
+                <div class="calc-row">
+                    <span>Collection Fee:</span>
+                    <span style="color: #4caf50; font-weight: 700;">FREE</span>
+                </div>
+                <div class="calc-row total-row">
+                    <span>Total:</span>
+                    <span id="cart-summary-total" class="text-yellow">$0.00</span>
+                </div>
+            </div>
+
+            <button id="cart-checkout-btn" class="btn-red-pill btn-checkout-submit" style="justify-content: center;" onclick="window.CheckoutModal ? window.CheckoutModal.open() : null">
+                <span>Proceed to Checkout</span>
+                <svg width="14" height="14" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+            </button>
+        </div>
+    </aside>
+
+    <!-- ==========================================
+         MODAL: DISH CUSTOMIZER
+         ========================================== -->
+    <div id="modal-backdrop" class="modal-backdrop" onclick="window.customizerModal ? window.customizerModal.close() : null"></div>
+    <div id="dish-customizer-modal" class="custom-modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3 id="customizer-modal-title" style="font-family: var(--font-display); font-size: 1.5rem;">Customize Dish</h3>
+            <button id="customizer-close-btn" class="drawer-close-btn" onclick="window.customizerModal.close()">&times;</button>
+        </div>
+        <form id="customizer-form" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+            <div id="customizer-body" class="modal-body">
+                <!-- Dynamic options injected here -->
+            </div>
+            <div class="modal-footer">
+                <div class="cart-stepper">
+                    <button type="button" class="stepper-btn" onclick="window.customizerModal.updateQuantity(-1)">−</button>
+                    <span id="modal-qty-val" class="stepper-val">1</span>
+                    <button type="button" class="stepper-btn" onclick="window.customizerModal.updateQuantity(1)">+</button>
+                </div>
+                <button type="submit" id="modal-add-cart-btn" class="btn-red-pill">
+                    <span>Add to Order</span>
+                    <span class="btn-price-tag" style="margin-left: 0.4rem;">$0.00</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ==========================================
+         MODAL: CHECKOUT SIMULATION
+         ========================================== -->
+    <div id="checkout-modal" class="custom-modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3 style="font-family: var(--font-display); font-size: 1.5rem;">Express Checkout</h3>
+            <button id="checkout-close-btn" class="drawer-close-btn" onclick="window.CheckoutModal.close()">&times;</button>
+        </div>
+        <form id="checkout-form" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+            <div class="modal-body">
+                <div class="form-group-row">
+                    <div class="form-field">
+                        <label for="checkout-name">Full Name *</label>
+                        <input type="text" id="checkout-name" class="form-input" placeholder="e.g. Liam Smith" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="checkout-phone">Mobile Phone *</label>
+                        <input type="tel" id="checkout-phone" class="form-input" placeholder="e.g. 021 555 1234" required>
+                    </div>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-field">
+                        <label for="checkout-email">Email Address</label>
+                        <input type="email" id="checkout-email" class="form-input" placeholder="For receipt copy">
+                    </div>
+                    <div class="form-field">
+                        <label for="checkout-pickup-time">Estimated Pickup / Delivery Time *</label>
+                        <select id="checkout-pickup-time" class="form-input">
+                            <option value="ASAP (15-20 min)">ASAP (15-20 min)</option>
+                            <option value="Today at 12:30 PM">Today at 12:30 PM</option>
+                            <option value="Today at 1:00 PM">Today at 1:00 PM</option>
+                            <option value="Today at 5:30 PM">Today at 5:30 PM</option>
+                            <option value="Today at 6:30 PM">Today at 6:30 PM</option>
+                            <option value="Today at 7:30 PM">Today at 7:30 PM</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label>Payment Method</label>
+                    <div class="payment-methods-grid">
+                        <div class="payment-method-pill active" data-method="apple-pay"> Apple Pay</div>
+                        <div class="payment-method-pill" data-method="google-pay">G Pay</div>
+                        <div class="payment-method-pill" data-method="counter">Pay in Store</div>
+                    </div>
+                </div>
+
+                <div style="background: #111; padding: 1rem; border-radius: 8px; border: 1px solid #282828;">
+                    <strong>Order Summary:</strong>
+                    <div id="checkout-order-items" style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem;"></div>
+                    <div class="calc-row total-row" style="margin-top: 0.6rem; font-size: 1.25rem;">
+                        <span>Total Due:</span>
+                        <span id="checkout-total" class="text-yellow">$0.00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-pill" style="padding: 0.5rem 1rem;" onclick="window.CheckoutModal.close()">Back</button>
+                <button type="submit" class="btn-red-pill">Place Order & Track Live</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ==========================================
+         MODAL: LIVE ORDER TRACKER
+         ========================================== -->
+    <div id="tracker-modal" class="custom-modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3 style="font-family: var(--font-display); font-size: 1.5rem; color: #4caf50;">✓ Order Confirmed!</h3>
+            <button id="tracker-close-btn" class="drawer-close-btn" onclick="window.CheckoutModal.closeTracker()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="tracker-receipt-card">
+                <span style="font-size: 0.8rem; color: var(--color-gray-600); text-transform: uppercase;">Order Number</span>
+                <span id="tracker-order-id" class="tracker-order-id">#BC-8492</span>
+                <p style="font-size: 0.92rem; color: var(--color-gray-300);">
+                    Guest: <strong id="tracker-customer-name">Liam</strong> • Total: <strong id="tracker-total" class="text-yellow">$0.00</strong><br>
+                    Ready for Collection: <strong id="tracker-pickup-time" style="color: #4caf50;">ASAP (15-20 min)</strong>
+                </p>
+            </div>
+
+            <div class="tracker-timeline">
+                <div id="track-step-1" class="timeline-step active">
+                    <span class="timeline-step-title">1. Order Received</span>
+                    <span class="timeline-step-desc">Kitchen team has received your ticket.</span>
+                </div>
+                <div id="track-step-2" class="timeline-step">
+                    <span class="timeline-step-title">2. Sizzling on the Grill</span>
+                    <span class="timeline-step-desc">Patties searing, buns toasting, fries in the fryer.</span>
+                </div>
+                <div id="track-step-3" class="timeline-step">
+                    <span class="timeline-step-title">3. Boxing Hot & Fresh</span>
+                    <span class="timeline-step-desc">Packaging in thermal heat-seal boxes.</span>
+                </div>
+                <div id="track-step-4" class="timeline-step">
+                    <span class="timeline-step-title">4. Ready for Pickup / Out for Delivery</span>
+                    <span class="timeline-step-desc">Head to the collection counter with your order #.</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="justify-content: center;">
+            <button type="button" class="btn-red-pill" onclick="window.CheckoutModal.closeTracker()">Done</button>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         FOOTER
+         ========================================== -->
+    <footer class="main-footer">
+        <div class="container">
+            <div class="footer-main-grid">
+                <!-- Col 1: Brand -->
+                <div class="footer-brand-block">
+                    <a href="#home" class="brand-logo-link" data-view="home">
+                        <div class="brand-logo-badge">B</div>
+                        <div class="brand-logo-text">BURGER <span>& CO.</span></div>
+                    </a>
+                    <p class="footer-brand-desc">
+                        Handcrafted fresh burgers, ciabatta toasties, loaded fries, and thickshakes made with 100% fresh local ingredients.
+                    </p>
+                    <div class="footer-socials">
+                        <a href="https://facebook.com" target="_blank" rel="noopener" class="footer-social-btn" aria-label="Facebook">f</a>
+                        <a href="https://instagram.com" target="_blank" rel="noopener" class="footer-social-btn" aria-label="Instagram">📸</a>
+                        <a href="https://youtube.com" target="_blank" rel="noopener" class="footer-social-btn" aria-label="YouTube">▶</a>
+                    </div>
+                </div>
+
+                <!-- Col 2: Navigation -->
+                <div>
+                    <h4 class="footer-col-heading">Navigations</h4>
+                    <ul class="footer-links-list">
+                        <li><a href="#home" data-view="home">Home</a></li>
+                        <li><a href="#menu" data-view="menu">Menu</a></li>
+                        <li><a href="#story" data-view="story">Our Story</a></li>
+                        <li><a href="#stores" data-view="stores">Stores</a></li>
+                        <li><a href="#contact" data-view="contact">Contact</a></li>
+                    </ul>
+                </div>
+
+                <!-- Col 3: Contact Us -->
+                <div>
+                    <h4 class="footer-col-heading">Contact Us</h4>
+                    <ul class="footer-links-list">
+                        <li><a href="tel:036660134">03 666 0134</a></li>
+                        <li><a href="mailto:support@burgerandco.nz">support@burgerandco.nz</a></li>
+                        <li><span>142 High Street, Christchurch</span></li>
+                        <li><span style="color: var(--color-primary);">Open Daily from 11:00 AM</span></li>
+                    </ul>
+                </div>
+
+                <!-- Col 4: Stores -->
+                <div>
+                    <h4 class="footer-col-heading">Our Locations</h4>
+                    <ul class="footer-links-list">
+                        <li><a href="#stores" data-view="stores">Downtown Central</a></li>
+                        <li><a href="#stores" data-view="stores">Riverside Promenade</a></li>
+                        <li><a href="#stores" data-view="stores">Lincoln Road Station</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="footer-bottom-strip">
+                <p>&copy; 2026 BURGER & CO. All Rights Reserved.</p>
+                <div style="display: flex; gap: 1.5rem;">
+                    <a href="#privacy" style="color: inherit; text-decoration: none;">Privacy Policy</a>
+                    <a href="#terms" style="color: inherit; text-decoration: none;">Terms & Conditions</a>
+                    <a href="#allergens" style="color: inherit; text-decoration: none;">Allergen Info</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Modules -->
+    <script src="js/restaurant-config.js"></script>
+    <script src="js/menu-data.js"></script>
+    <script src="js/cart.js"></script>
+    <script src="js/interactions.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
