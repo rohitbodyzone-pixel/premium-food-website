@@ -617,7 +617,16 @@ class CheckoutModal {
 
         if (!listEl) return;
 
-        listEl.innerHTML = window.cart.items.map(item => `
+        let tableHeaderHtml = '';
+        if (window.cart && window.cart.tableNumber) {
+            tableHeaderHtml = `
+                <div style="background: rgba(46, 204, 113, 0.15); border: 1px solid #2ecc71; color: #2ecc71; padding: 0.45rem 0.8rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.8rem; text-align: center;">
+                    📍 Dine-In Order — Serving to Table ${window.cart.tableNumber}
+                </div>
+            `;
+        }
+
+        listEl.innerHTML = tableHeaderHtml + window.cart.items.map(item => `
             <div class="checkout-item-line">
                 <span>${item.quantity}x ${item.name}</span>
                 <span>$${(item.unitPrice * item.quantity).toFixed(2)}</span>

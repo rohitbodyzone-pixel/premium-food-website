@@ -84,7 +84,29 @@ const RestaurantConfig = {
         "Today at 6:30 PM",
         "Today at 7:30 PM",
         "Today at 8:30 PM"
-    ]
+    ],
+
+    qrOrder: {
+        // =========================================================================
+        // CENTRAL QR CONFIGURATION SETTING
+        // Update liveDomainUrl once your website is hosted on your live domain
+        // =========================================================================
+        liveDomainUrl: "https://rohitbodyzone-pixel.github.io/premium-food-website",
+        menuAnchor: "#menu",
+        qrMenuUrl: "https://rohitbodyzone-pixel.github.io/premium-food-website/#menu",
+        qrPngAsset: "assets/images/order-here-qr.png",
+        qrSvgAsset: "assets/images/order-here-qr.svg",
+        getTableUrl: function(tableNumber) {
+            const domain = (this.liveDomainUrl || "").replace(/\/+$/, "");
+            if (!tableNumber) return `${domain}/#menu`;
+            return `${domain}/?table=${encodeURIComponent(tableNumber)}#menu`;
+        },
+        badge: "SCAN TO ORDER",
+        title: "Order Straight From Your Phone",
+        subtitle: "Scan the QR code with your phone camera to view our handcrafted menu and order hot for table service, counter pickup, or delivery.",
+        noAppText: "⚡ No App Download Required • Instant Browser Ordering"
+    }
 };
 
 window.RestaurantConfig = RestaurantConfig;
+

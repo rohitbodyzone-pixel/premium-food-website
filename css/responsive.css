@@ -246,4 +246,64 @@
         flex-direction: column;
         width: 100%;
     }
+
+    .qr-order-card {
+        padding: 2rem 1.5rem;
+    }
+
+    .qr-main-heading {
+        font-size: 2rem;
+    }
+
+    .qr-stand-frame {
+        max-width: 280px;
+        padding: 1.5rem 1.2rem;
+    }
+
+    .qr-code-img {
+        width: 150px;
+        height: 150px;
+    }
 }
+
+/* Tablet adjustments for QR Order Section (max-width: 992px) */
+@media (max-width: 992px) {
+    .qr-order-card {
+        grid-template-columns: 1fr;
+        padding: 2.5rem 2rem;
+        text-align: center;
+        gap: 2.5rem;
+    }
+
+    .qr-order-text-side {
+        align-items: center;
+    }
+
+    .qr-badge-pill {
+        margin: 0 auto;
+    }
+
+    .qr-features-list {
+        text-align: left;
+        max-width: 400px;
+        margin: 0.5rem auto 1rem auto;
+    }
+
+    .qr-cta-group {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .qr-order-now-btn {
+        width: 100%;
+        max-width: 320px;
+        justify-content: center;
+    }
+
+    .qr-print-btn {
+        width: 100%;
+        max-width: 320px;
+        justify-content: center;
+    }
+}
+

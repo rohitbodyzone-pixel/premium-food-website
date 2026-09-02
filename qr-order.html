@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Printable Table & Counter QR Card | BURGER & CO.</title>
+    <meta name="description" content="Official printable QR code table ordering card for BURGER & CO. Scan to view menu and order online.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Oswald:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Restaurant Config -->
+    <script src="js/restaurant-config.js"></script>
+
+    <style>
+        :root {
+            --color-primary: #e63946;
+            --color-primary-dark: #c52230;
+            --color-dark: #111111;
+            --color-card-bg: #181818;
+            --color-gray-100: #f8f9fa;
+            --color-gray-800: #2b2b2b;
+            --font-display: 'Bangers', cursive;
+            --font-heading: 'Oswald', sans-serif;
+            --font-body: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: #0d0d0d;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        /* ----------------------------------------------------
+           TOP CONTROL BAR (HIDDEN ON PRINT)
+           ---------------------------------------------------- */
+        .controls-toolbar {
+            width: 100%;
+            max-width: 800px;
+            background: #1c1c1c;
+            border: 1px solid #333333;
+            border-radius: 12px;
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .control-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .select-input, .text-input {
+            background: #282828;
+            color: #ffffff;
+            border: 1px solid #444444;
+            padding: 0.5rem 0.8rem;
+            border-radius: 6px;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .select-input:focus, .text-input:focus {
+            border-color: var(--color-primary);
+        }
+
+        .btn-print-action {
+            background: var(--color-primary);
+            color: #ffffff;
+            border: none;
+            padding: 0.6rem 1.4rem;
+            border-radius: 30px;
+            font-family: var(--font-heading);
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-print-action:hover {
+            background: var(--color-primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(230, 57, 70, 0.4);
+        }
+
+        .btn-link-back {
+            color: #888888;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: color 0.2s;
+        }
+
+        .btn-link-back:hover {
+            color: #ffffff;
+        }
+
+        /* ----------------------------------------------------
+           PRINTABLE TABLE TENT CARD (CONTAINER)
+           ---------------------------------------------------- */
+        .print-card-wrapper {
+            width: 100%;
+            max-width: 440px;
+            background: #141414;
+            border: 3px solid #282828;
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Ambient subtle red accent glow */
+        .print-card-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 240px;
+            height: 12px;
+            background: var(--color-primary);
+            border-radius: 0 0 10px 10px;
+        }
+
+        /* Brand Header */
+        .card-brand-badge {
+            font-family: var(--font-display);
+            font-size: 2.2rem;
+            letter-spacing: 0.05em;
+            color: #ffffff;
+            margin-top: 0.5rem;
+            line-height: 1;
+        }
+
+        .card-brand-badge span {
+            color: var(--color-primary);
+        }
+
+        .card-tagline {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: #999999;
+            font-weight: 700;
+            margin-top: 0.3rem;
+            margin-bottom: 1.2rem;
+        }
+
+        /* Dynamic Table Badge */
+        .card-table-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #222222;
+            border: 1px solid #3a3a3a;
+            padding: 0.35rem 1.2rem;
+            border-radius: 30px;
+            font-family: var(--font-heading);
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+
+        .card-table-pill .dot {
+            width: 8px;
+            height: 8px;
+            background: #2ecc71;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* Main Call to Action */
+        .card-title-main {
+            font-family: var(--font-heading);
+            font-size: 2.6rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #ffffff;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            margin-bottom: 0.4rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.95rem;
+            color: #cccccc;
+            line-height: 1.4;
+            margin-bottom: 1.5rem;
+            max-width: 320px;
+        }
+
+        /* QR Frame with Safe Quiet Zone (Pure White Box for 100% Scan Reliability) */
+        .card-qr-box {
+            background: #ffffff;
+            padding: 1.2rem;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+            display: inline-block;
+            margin-bottom: 1.2rem;
+            position: relative;
+        }
+
+        .card-qr-img {
+            width: 220px;
+            height: 220px;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* Instructions list */
+        .card-steps-row {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+            width: 100%;
+        }
+
+        .card-step-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+            font-size: 0.75rem;
+            color: #aaaaaa;
+            font-weight: 600;
+        }
+
+        .card-step-icon {
+            font-size: 1.1rem;
+        }
+
+        /* Footer info */
+        .card-footer-info {
+            border-top: 1px solid #282828;
+            padding-top: 1rem;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            align-items: center;
+        }
+
+        .card-no-app-badge {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #2ecc71;
+            letter-spacing: 0.02em;
+        }
+
+        .card-url-display {
+            font-size: 0.75rem;
+            color: #666666;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        /* ----------------------------------------------------
+           WHITE THEME MODE (For economical ink printing)
+           ---------------------------------------------------- */
+        body.theme-white-print {
+            background: #ffffff;
+            color: #111111;
+        }
+
+        body.theme-white-print .print-card-wrapper {
+            background: #ffffff;
+            color: #111111;
+            border: 3px solid #111111;
+            box-shadow: none;
+        }
+
+        body.theme-white-print .card-brand-badge {
+            color: #111111;
+        }
+
+        body.theme-white-print .card-title-main {
+            color: #111111;
+        }
+
+        body.theme-white-print .card-subtitle {
+            color: #444444;
+        }
+
+        body.theme-white-print .card-table-pill {
+            background: #f0f0f0;
+            color: #111111;
+            border-color: #cccccc;
+        }
+
+        body.theme-white-print .card-qr-box {
+            border: 2px solid #111111;
+            box-shadow: none;
+        }
+
+        body.theme-white-print .card-footer-info {
+            border-top-color: #e0e0e0;
+        }
+
+        body.theme-white-print .card-url-display {
+            color: #333333;
+        }
+
+        /* ----------------------------------------------------
+           PRINT MEDIA QUERY (TRIGGERED ON window.print())
+           ---------------------------------------------------- */
+        @media print {
+            @page {
+                size: portrait;
+                margin: 10mm;
+            }
+
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .controls-toolbar {
+                display: none !important;
+            }
+
+            .print-card-wrapper {
+                max-width: 100% !important;
+                width: 100% !important;
+                border: 2px solid #000000 !important;
+                box-shadow: none !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                page-break-inside: avoid;
+            }
+
+            .print-card-wrapper::before {
+                background: #e63946 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .card-brand-badge {
+                color: #000000 !important;
+            }
+
+            .card-title-main {
+                color: #000000 !important;
+            }
+
+            .card-subtitle {
+                color: #333333 !important;
+            }
+
+            .card-table-pill {
+                background: #eeeeee !important;
+                color: #000000 !important;
+                border-color: #999999 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .card-qr-box {
+                background: #ffffff !important;
+                border: 2px solid #000000 !important;
+                box-shadow: none !important;
+            }
+
+            .card-qr-img {
+                width: 240px !important;
+                height: 240px !important;
+            }
+
+            .card-step-item {
+                color: #333333 !important;
+            }
+
+            .card-footer-info {
+                border-top-color: #cccccc !important;
+            }
+
+            .card-no-app-badge {
+                color: #000000 !important;
+                font-weight: 800 !important;
+            }
+
+            .card-url-display {
+                color: #333333 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP CONTROLS (Hidden when printing) -->
+    <div class="controls-toolbar">
+        <div class="control-group">
+            <a href="index.html" class="btn-link-back">&larr; Back to Website</a>
+        </div>
+
+        <div class="control-group">
+            <label for="table-select" class="control-label">Table / Location:</label>
+            <select id="table-select" class="select-input" onchange="updateTableSelection(this.value)">
+                <option value="TABLE ORDER">General / Any Table</option>
+                <option value="COUNTER / PICKUP">Counter / Takeaway</option>
+                <option value="TABLE 1">Table 1</option>
+                <option value="TABLE 2">Table 2</option>
+                <option value="TABLE 3">Table 3</option>
+                <option value="TABLE 4">Table 4</option>
+                <option value="TABLE 5">Table 5</option>
+                <option value="TABLE 6">Table 6</option>
+                <option value="TABLE 7">Table 7</option>
+                <option value="TABLE 8">Table 8</option>
+                <option value="TABLE 9">Table 9</option>
+                <option value="TABLE 10">Table 10</option>
+                <option value="TABLE 11">Table 11</option>
+                <option value="TABLE 12">Table 12</option>
+                <option value="TABLE 15">Table 15</option>
+                <option value="TABLE 20">Table 20</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="theme-select" class="control-label">Print Style:</label>
+            <select id="theme-select" class="select-input" onchange="toggleTheme(this.value)">
+                <option value="dark">Luxury Dark Stand</option>
+                <option value="white">Clean White (Ink-Saver)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <button type="button" class="btn-print-action" onclick="window.print()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                <span>Print Table Card</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- PRINTABLE RESTAURANT STAND / TENT CARD -->
+    <div class="print-card-wrapper" id="printable-card">
+        <!-- Brand Logo -->
+        <div class="card-brand-badge">BURGER <span>& CO.</span></div>
+        <div class="card-tagline">Handcrafted Burgers & Wood-Fired Bites</div>
+
+        <!-- Dynamic Table Badge -->
+        <div class="card-table-pill" id="card-table-label">
+            <span class="dot"></span>
+            <span id="card-table-text">TABLE ORDER</span>
+        </div>
+
+        <!-- Main Heading -->
+        <h1 class="card-title-main">SCAN TO ORDER</h1>
+        <p class="card-subtitle">Scan the QR code with your phone camera to view our menu and place your order.</p>
+
+        <!-- High Contrast QR Code -->
+        <div class="card-qr-box">
+            <img src="assets/images/order-here-qr.svg" alt="Scan to Order QR Code" class="card-qr-img" id="card-qr-image">
+        </div>
+
+        <!-- Steps -->
+        <div class="card-steps-row">
+            <div class="card-step-item">
+                <span class="card-step-icon">📷</span>
+                <span>1. Scan Camera</span>
+            </div>
+            <div class="card-step-item">
+                <span class="card-step-icon">🍔</span>
+                <span>2. Pick Burgers</span>
+            </div>
+            <div class="card-step-item">
+                <span class="card-step-icon">⚡</span>
+                <span>3. Order & Pay</span>
+            </div>
+        </div>
+
+        <!-- Footer Info -->
+        <div class="card-footer-info">
+            <span class="card-no-app-badge">✓ NO APP DOWNLOAD REQUIRED</span>
+            <span class="card-url-display" id="card-target-url">rohitbodyzone-pixel.github.io/premium-food-website/#menu</span>
+        </div>
+    </div>
+
+    <!-- Script to handle dynamic query param, table number, and config updates -->
+    <script>
+        // Read URL query params on load (e.g. ?table=5 or ?table=Counter)
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tableParam = urlParams.get('table');
+
+            // Load from RestaurantConfig if available
+            const config = window.RestaurantConfig && window.RestaurantConfig.qrOrder ? window.RestaurantConfig.qrOrder : {
+                liveDomainUrl: "https://rohitbodyzone-pixel.github.io/premium-food-website",
+                menuAnchor: "#menu",
+                qrMenuUrl: "https://rohitbodyzone-pixel.github.io/premium-food-website/#menu"
+            };
+
+            if (tableParam) {
+                const formattedTable = isNaN(tableParam) ? tableParam.toUpperCase() : `TABLE ${tableParam}`;
+                updateTableSelection(formattedTable);
+                const tableSelect = document.getElementById('table-select');
+                if (tableSelect) {
+                    let optionFound = false;
+                    for (let i = 0; i < tableSelect.options.length; i++) {
+                        if (tableSelect.options[i].value.toLowerCase() === formattedTable.toLowerCase()) {
+                            tableSelect.selectedIndex = i;
+                            optionFound = true;
+                            break;
+                        }
+                    }
+                    if (!optionFound) {
+                        const newOption = new Option(formattedTable, formattedTable, true, true);
+                        tableSelect.add(newOption);
+                    }
+                }
+            } else {
+                updateTableSelection('TABLE ORDER');
+            }
+        });
+
+        function updateTableSelection(val) {
+            const tableText = document.getElementById('card-table-text');
+            const urlDisplay = document.getElementById('card-target-url');
+            const qrImg = document.getElementById('card-qr-image');
+
+            if (tableText) tableText.textContent = val;
+
+            const config = window.RestaurantConfig && window.RestaurantConfig.qrOrder ? window.RestaurantConfig.qrOrder : {
+                liveDomainUrl: "https://rohitbodyzone-pixel.github.io/premium-food-website",
+                menuAnchor: "#menu"
+            };
+
+            const domain = (config.liveDomainUrl || "https://rohitbodyzone-pixel.github.io/premium-food-website").replace(/\/+$/, "");
+            let targetUrl = `${domain}/#menu`;
+
+            if (val && !val.includes('ORDER') && !val.includes('Counter')) {
+                const numOnly = val.replace(/[^0-9]/g, '');
+                if (numOnly) {
+                    targetUrl = `${domain}/?table=${numOnly}#menu`;
+                }
+            }
+
+            if (urlDisplay) {
+                urlDisplay.textContent = targetUrl.replace('https://', '');
+            }
+        }
+
+        function toggleTheme(theme) {
+            if (theme === 'white') {
+                document.body.classList.add('theme-white-print');
+            } else {
+                document.body.classList.remove('theme-white-print');
+            }
+        }
+    </script>
+</body>
+</html>

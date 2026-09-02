@@ -12,6 +12,7 @@ class RestaurantApp {
         this.selectedStore = "Downtown Central Flagship";
         this.deliveryAddress = "";
         this.searchQuery = "";
+        this.tableNumber = null;
 
         this.init();
     }
@@ -25,23 +26,74 @@ class RestaurantApp {
         this.bindOrderModeToggle();
         this.bindSearchInput();
         this.bindForms();
+        this.detectTableParam();
         this.handleInitialRoute();
+    }
+
+    /**
+     * Detect and bind Table parameter from URL (e.g. ?table=3 or #menu?table=3)
+     */
+    detectTableParam() {
+        const urlParams = new URLSearchParams(window.location.search);
+        let table = urlParams.get('table');
+        
+        if (!table && window.location.hash.includes('table=')) {
+            const hashParts = window.location.hash.split('?');
+            if (hashParts[1]) {
+                const hashParams = new URLSearchParams(hashParts[1]);
+                table = hashParams.get('table');
+            }
+        }
+
+        if (table) {
+            this.tableNumber = table;
+            if (window.cart) {
+                window.cart.tableNumber = table;
+            }
+            this.renderTableNotice(table);
+        }
+    }
+
+    renderTableNotice(tableNum) {
+        const menuHeader = document.querySelector('.menu-page-header .container');
+        if (menuHeader && !document.getElementById('table-active-banner')) {
+            const banner = document.createElement('div');
+            banner.id = 'table-active-banner';
+            banner.style.cssText = 'background: rgba(46, 204, 113, 0.15); border: 1px solid #2ecc71; color: #ffffff; padding: 0.9rem 1.4rem; border-radius: 12px; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;';
+            banner.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-size: 1.4rem;">📍</span>
+                    <div>
+                        <strong style="color: #2ecc71; font-size: 1.1rem; letter-spacing: 0.03em;">Table ${tableNum} Connected</strong>
+                        <span style="display: block; font-size: 0.85rem; color: #cccccc;">Your order will be prepared and served directly to Table ${tableNum}.</span>
+                    </div>
+                </div>
+                <span style="background: #2ecc71; color: #111111; font-weight: 800; font-size: 0.75rem; padding: 0.35rem 0.9rem; border-radius: 20px; text-transform: uppercase;">Dine-In Table Order</span>
+            `;
+            menuHeader.insertBefore(banner, menuHeader.firstChild);
+        }
     }
 
     /**
      * Handle initial URL hash or default to home
      */
     handleInitialRoute() {
-        const hash = (window.location.hash || "").replace("#", "").toLowerCase();
+        let cleanHash = (window.location.hash || "").replace("#", "").split('?')[0].toLowerCase();
         const validViews = ["home", "menu", "story", "stores", "contact"];
-        if (validViews.includes(hash)) {
-            this.switchPageView(hash);
+        
+        // If table query param exists without hash, route directly to menu
+        if (this.tableNumber && (!cleanHash || cleanHash === 'home')) {
+            cleanHash = 'menu';
+        }
+
+        if (validViews.includes(cleanHash)) {
+            this.switchPageView(cleanHash);
         } else {
             this.switchPageView("home");
         }
 
         window.addEventListener("hashchange", () => {
-            const newHash = (window.location.hash || "").replace("#", "").toLowerCase();
+            const newHash = (window.location.hash || "").replace("#", "").split('?')[0].toLowerCase();
             if (validViews.includes(newHash) && newHash !== this.currentView) {
                 this.switchPageView(newHash);
             }

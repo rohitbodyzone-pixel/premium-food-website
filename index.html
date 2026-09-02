@@ -228,6 +228,81 @@
             </div>
         </section>
 
+        <!-- 5B. SCAN TO ORDER / QR CODE RESTAURANT SECTION -->
+        <section class="qr-order-section" id="qr-order-section">
+            <div class="container">
+                <div class="qr-order-card">
+                    <!-- Left: Text & Badges -->
+                    <div class="qr-order-text-side">
+                        <div class="qr-badge-pill">
+                            <span class="qr-pulse-dot"></span>
+                            <span>SCAN TO ORDER • ORDER HERE</span>
+                        </div>
+                        <h2 class="qr-main-heading">ORDER HERE <span class="text-red">FROM YOUR PHONE</span></h2>
+                        <p class="qr-subtext">
+                            Scan the QR code with your phone camera to view our live handcrafted menu, customize your burgers, and place your order directly.
+                        </p>
+
+                        <!-- Feature highlights -->
+                        <div class="qr-features-list">
+                            <div class="qr-feature-item">
+                                <span class="qr-feature-icon">⚡</span>
+                                <div>
+                                    <strong>Instant Menu Access</strong>
+                                    <p>Opens straight to the menu section with zero loading delay.</p>
+                                </div>
+                            </div>
+                            <div class="qr-feature-item">
+                                <span class="qr-feature-icon">🍔</span>
+                                <div>
+                                    <strong>Table & Counter Ordering Ready</strong>
+                                    <p>Suitable for table stands, takeaway counters, and food bags.</p>
+                                </div>
+                            </div>
+                            <div class="qr-feature-item">
+                                <span class="qr-feature-icon">✨</span>
+                                <div>
+                                    <strong>No App Download Required</strong>
+                                    <p>Runs smoothly on all iOS and Android devices directly in browser.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="qr-cta-group">
+                            <!-- Direct Order Button (Prominent for Mobile Users) -->
+                            <a href="#menu" class="btn-red-pill qr-order-now-btn" data-view="menu">
+                                <svg width="14" height="14" viewBox="0 0 170 170" fill="currentColor"><path d="M13.0769 170V143.846H125.408L0 18.4385L18.4385 -3.8147e-06L143.846 125.408V13.0769H170V170H13.0769Z"/></svg>
+                                <span>ORDER HERE</span>
+                            </a>
+                            
+                            <!-- Printable Stand Link -->
+                            <a href="qr-order.html" target="_blank" class="btn-outline-pill qr-print-btn">
+                                <span>🖨️ Printable Table Cards</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Right: Scannable QR Code Showcase Card -->
+                    <div class="qr-showcase-side">
+                        <div class="qr-stand-frame">
+                            <div class="qr-stand-header">
+                                <span class="qr-stand-brand">BURGER <span>& CO.</span></span>
+                                <span class="qr-stand-label">TABLE & COUNTER ORDER</span>
+                            </div>
+                            <div class="qr-image-wrapper">
+                                <img src="assets/images/order-here-qr.svg" alt="Scan to Order Handcrafted Burgers" class="qr-code-img" id="homepage-qr-img">
+                            </div>
+                            <div class="qr-stand-footer">
+                                <span class="qr-scan-hint">📷 Point phone camera to scan</span>
+                                <span class="qr-target-url-preview">burgerandco.nz/#menu</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- 6. "YOUR FAVOURITES IN MINUTES" & NEWSLETTER -->
         <section class="footer-promo-section">
             <div class="container">
@@ -695,6 +770,7 @@
                         <li><a href="#story" data-view="story">Our Story</a></li>
                         <li><a href="#stores" data-view="stores">Stores</a></li>
                         <li><a href="#contact" data-view="contact">Contact</a></li>
+                        <li><a href="qr-order.html" target="_blank" style="color: var(--color-primary); font-weight: 700;">📱 Table QR Ordering</a></li>
                     </ul>
                 </div>
 
