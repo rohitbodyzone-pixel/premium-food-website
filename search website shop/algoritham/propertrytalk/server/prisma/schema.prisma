@@ -1,0 +1,545 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String?        @unique
+  passwordHash  String?
+  name          String
+  role          String         @default("CONSUMER") // CONSUMER, EXPERT, SUPER_ADMIN
+  phone         String?
+  phoneNumber   String?        @unique
+  phoneCountryCode String?
+  phoneVerifiedAt  DateTime?
+  countryCode   String?        // Country preference (e.g. NZ, AU)
+  
+  emailVerifiedAt        DateTime?
+  accountStatus          String         @default("ACTIVE") // ACTIVE, SUSPENDED, LOCKED
+  lastLoginAt            DateTime?
+  failedLoginAttempts    Int            @default(0)
+  lockoutUntil           DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  verificationTokenHash  String?
+  verificationExpiresAt  DateTime?
+  lastVerificationEmailSentAt DateTime?
+  lastPasswordResetRequestedAt DateTime?
+  loginOtpHash           String?
+  loginOtpExpiresAt      DateTime?
+  loginOtpAttempts       Int            @default(0)
+  lastLoginOtpSentAt     DateTime?
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  expertProfile ExpertProfile?
+  chatsInitiated ConsultationChat[] @relation("ConsumerChats")
+  callsInitiated CallSession[]      @relation("ConsumerCalls")
+  appointments  Appointment[]      @relation("ConsumerAppointments")
+  reviewsGiven  Review[]           @relation("ConsumerReviews")
+  savedExperts  SavedExpert[]
+  auditLogs     VerificationAuditLog[]
+  paymentCustomer        PaymentCustomer?
+  billingSessions        ConsultationBillingSession[] @relation("ConsumerBillingSessions")
+  paymentTransactions    PaymentTransaction[]         @relation("ConsumerTransactions")
+  refundsInitiated       Refund[]                     @relation("AdminRefunds")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  pushSubscriptions      PushSubscription[]
+}
+
+model Country {
+  code                    String    @id // NZ, AU, UK, US, etc.
+  name                    String
+  flag                    String    // emoji or svg identifier: "🇳🇿", "🇦🇺"
+  currency                String    // NZD, AUD
+  currencySymbol          String    // $
+  isActive                Boolean   @default(true)
+  freeCallMinutesDefault  Int       @default(1)
+  legalText               String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  expertProfiles          ExpertProfile[]
+  officialRegisterLinks   OfficialRegisterLink[]
+}
+
+model Category {
+  id                    String    @id @default(uuid())
+  slug                  String    @unique // real-estate-agent, mortgage-adviser, property-lawyer, building-inspector, etc.
+  name                  String
+  icon                  String    // Lucide icon name: Home, Landmark, Scale, ShieldCheck, etc.
+  description           String
+  isActive              Boolean   @default(true)
+  displayOrder          Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  expertProfiles        ExpertProfile[]
+  officialRegisterLinks OfficialRegisterLink[]
+}
+
+model OfficialRegisterLink {
+  id          String   @id @default(uuid())
+  countryCode String
+  categoryId  String
+  title       String   // e.g., "NZ Real Estate Authority (REA) Public Register"
+  urlPattern  String   // e.g., "https://www.rea.govt.nz/public-register/"
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  country     Country  @relation(fields: [countryCode], references: [code], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model ExpertProfile {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  countryCode          String
+  categoryId           String
+  title                String   // e.g., "Senior Property Lawyer & Conveyancer"
+  bio                  String
+  yearsOfExperience    Int      @default(0)
+  city                 String
+  languages            String   // Stored as JSON array string, e.g. '["English", "Mandarin"]'
+  specialities         String   // Stored as JSON array string, e.g. '["First Home Buyers", "Commercial Leases"]'
+  photoUrl             String?
+  businessName         String
+  businessRegNumber    String?  // NZBN / ABN
+  licenseNumber        String?  // Professional Registration/Licence
+  payoutDetails        String?  // Masked or formatted account details
+
+  verificationStatus   String   @default("DRAFT") // DRAFT, PENDING_VERIFICATION, VERIFIED, REJECTED, SUSPENDED, EXPIRED
+  isOnline             Boolean  @default(false)
+  
+  hourlyRate           Float    @default(150.0)
+  callPerMinuteRate    Float    @default(2.5)
+  freeCallMinutes      Int      @default(1)
+
+  chatRateMinorUnits   Int      @default(250) // NZD/AUD cents per min ($2.50)
+  audioRateMinorUnits  Int      @default(250) // NZD/AUD cents per min ($2.50)
+  videoRateMinorUnits  Int      @default(300) // NZD/AUD cents per min ($3.00)
+  payoutStatus         String   @default("NOT_STARTED") // NOT_STARTED, PENDING, RESTRICTED, ACTIVE
+  stripeAccountId      String?
+  paidConsultationsEnabled Boolean @default(true)
+
+  timezone             String   @default("Pacific/Auckland") // IANA Timezone, e.g. Pacific/Auckland, Australia/Sydney
+  appointmentDurations String   @default("[15,30,45,60]") // JSON array of allowed duration minutes
+  bufferMinutes        Int      @default(10) // buffer between appointments
+  minimumNoticeMinutes Int      @default(120) // 2 hours minimum booking notice
+  maxAdvanceDays       Int      @default(60) // how far in advance appointments can be booked
+
+  ratingAvg            Float    @default(5.0)
+  ratingCount          Int      @default(0)
+  isDemo               Boolean  @default(false)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  country              Country  @relation(fields: [countryCode], references: [code])
+  category             Category @relation(fields: [categoryId], references: [id])
+
+  documents            VerificationDocument[]
+  auditLogs            VerificationAuditLog[]
+  consultationChats    ConsultationChat[]     @relation("ExpertChats")
+  callSessions         CallSession[]          @relation("ExpertCalls")
+  appointments         Appointment[]          @relation("ExpertAppointments")
+  reviewsReceived      Review[]               @relation("ExpertReviews")
+  savedByUsers         SavedExpert[]
+  availabilitySlots    AppointmentSlot[]
+  timeOffBlocks        ExpertTimeOff[]
+  billingSessions      ConsultationBillingSession[] @relation("ExpertBillingSessions")
+  transactions         PaymentTransaction[]         @relation("ExpertTransactions")
+  earnings             ExpertEarning[]
+}
+
+model VerificationDocument {
+  id              String        @id @default(uuid())
+  expertProfileId String
+  docType         String        // GOVERNMENT_ID, LICENSE_CERTIFICATE, BUSINESS_REGISTRATION, OTHER
+  title           String
+  fileUrl         String        // Safe path / mock file URL
+  uploadedAt      DateTime      @default(now())
+
+  expertProfile   ExpertProfile @relation(fields: [expertProfileId], references: [id], onDelete: Cascade)
+}
+
+model VerificationAuditLog {
+  id              String        @id @default(uuid())
+  expertProfileId String
+  adminUserId     String?
+  action          String        // APPROVE, REJECT, REQUEST_INFO, SUSPEND, REVERIFY_REQUIRED
+  notes           String?
+  source          String?       // "REA Public Register", "ASIC Check", "Manual Upload"
+  createdAt       DateTime      @default(now())
+
+  expertProfile   ExpertProfile @relation(fields: [expertProfileId], references: [id], onDelete: Cascade)
+  adminUser       User?         @relation(fields: [adminUserId], references: [id])
+}
+
+model ConsultationChat {
+  id                   String        @id @default(uuid())
+  consumerId           String
+  expertId             String        // Refers to ExpertProfile.id
+  status               String        @default("REQUESTED") // REQUESTED, CONNECTED, DECLINED, MISSED, CANCELLED, EXPIRED_FREE, PAID_ACTIVE, ENDED, ACTIVE, CLOSED
+  
+  requestedAt          DateTime      @default(now())
+  acceptedAt           DateTime?
+  connectedAt          DateTime?
+  declinedAt           DateTime?
+  endedAt              DateTime?
+  initialMessage       String?
+  declineReason        String?
+
+  freeSecondsRemaining Int           @default(60)
+  freeStartedAt        DateTime?
+  freeExpiredAt        DateTime?
+  isFreeExpired        Boolean       @default(false)
+  extendedPaid         Boolean       @default(false)
+  costCharged          Float         @default(0.0)
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  consumer             User          @relation("ConsumerChats", fields: [consumerId], references: [id], onDelete: Cascade)
+  expert               ExpertProfile @relation("ExpertChats", fields: [expertId], references: [id], onDelete: Cascade)
+
+  messages             ChatMessage[]
+  calls                CallSession[]
+  billingSession       ConsultationBillingSession?
+}
+
+model ChatMessage {
+  id        String           @id @default(uuid())
+  chatId    String
+  senderId  String           // User ID of consumer or expert
+  content   String
+  isSystem  Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  chat      ConsultationChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+model CallSession {
+  id                 String           @id @default(uuid())
+  chatId             String
+  consumerId         String
+  expertId           String           // ExpertProfile.id
+  callType           String           // AUDIO, VIDEO
+  status             String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  freeMinutesAllowed Int              @default(1)
+  startedAt          DateTime?
+  connectedAt        DateTime?
+  endedAt            DateTime?
+  durationSeconds    Int              @default(0)
+  freeSecondsRemaining Int            @default(60)
+
+  freeTimeExpiredAt  DateTime?
+  extendedPaid       Boolean          @default(false)
+  costCharged        Float            @default(0.0)
+
+  reconnectAttempts  Int              @default(0)
+  endReason          String?          // NORMAL, CALLER_CANCELLED, DECLINED, TIMEOUT_NO_ANSWER, FAILED_WEBRTC, DISCONNECTED
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  chat               ConsultationChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  consumer           User             @relation("ConsumerCalls", fields: [consumerId], references: [id])
+  expert             ExpertProfile    @relation("ExpertCalls", fields: [expertId], references: [id])
+  billingSession     ConsultationBillingSession?
+}
+
+model AppointmentSlot {
+  id              String        @id @default(uuid())
+  expertProfileId String
+  dayOfWeek       Int           // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime       String        // "09:00"
+  endTime         String        // "17:00"
+  isAvailable     Boolean       @default(true)
+
+  expertProfile   ExpertProfile @relation(fields: [expertProfileId], references: [id], onDelete: Cascade)
+}
+
+model Appointment {
+  id                 String        @id @default(uuid())
+  expertId           String        // ExpertProfile.id
+  consumerId         String
+  date               String        // "2026-09-10"
+  startTime          String        // "10:00"
+  endTime            String        // "10:45"
+  startUtc           DateTime?     // Normalized UTC start for exact timezone conversion & conflict checks
+  endUtc             DateTime?     // Normalized UTC end
+  timezone           String        @default("Pacific/Auckland")
+  consultationType   String        @default("VIDEO") // CHAT, AUDIO, VIDEO
+  durationMinutes    Int           @default(45)
+  status             String        @default("BOOKED") // PENDING, BOOKED, CONFIRMED, COMPLETED, CANCELLED, RESCHEDULED, NO_SHOW
+  notes              String?
+
+  rescheduledFromId  String?
+  rescheduleReason   String?
+  rescheduledBy      String?       // "CONSUMER", "EXPERT", "ADMIN"
+  rescheduledAt      DateTime?
+
+  cancelledBy        String?       // "CONSUMER", "EXPERT", "ADMIN"
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  reminder24hSent    Boolean       @default(false)
+  reminder1hSent     Boolean       @default(false)
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  expert             ExpertProfile @relation("ExpertAppointments", fields: [expertId], references: [id])
+  consumer           User          @relation("ConsumerAppointments", fields: [consumerId], references: [id])
+}
+
+model Review {
+  id              String        @id @default(uuid())
+  expertId        String        // ExpertProfile.id
+  consumerId      String
+  rating          Int           // 1 to 5
+  comment         String
+  createdAt       DateTime      @default(now())
+
+  expert          ExpertProfile @relation("ExpertReviews", fields: [expertId], references: [id], onDelete: Cascade)
+  consumer        User          @relation("ConsumerReviews", fields: [consumerId], references: [id])
+
+  @@unique([expertId, consumerId]) // Prevent duplicate reviews per expert from same consumer
+}
+
+model SavedExpert {
+  id              String        @id @default(uuid())
+  consumerId      String
+  expertId        String        // ExpertProfile.id
+  createdAt       DateTime      @default(now())
+
+  consumer        User          @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  expert          ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+
+  @@unique([consumerId, expertId])
+}
+
+model SystemConfig {
+  key         String   @id // e.g. "free_call_duration_seconds", "platform_commission_pct"
+  value       String   // e.g. "120", "15"
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model PaymentCustomer {
+  id                     String                    @id @default(uuid())
+  userId                 String                    @unique
+  provider               String                    @default("MOCK") // "STRIPE", "MOCK"
+  providerCustomerId     String                    @unique
+  defaultPaymentMethodId String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  user                   User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethods         PaymentMethodReference[]
+}
+
+model PaymentMethodReference {
+  id                String          @id @default(uuid())
+  paymentCustomerId String
+  providerMethodId  String          @unique // e.g. pm_123 or mock_pm_123
+  type              String          @default("card")
+  cardBrand         String          // "visa", "mastercard", "amex"
+  cardLast4         String          // "4242"
+  cardExpMonth      Int
+  cardExpYear       Int
+  isDefault         Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  paymentCustomer   PaymentCustomer @relation(fields: [paymentCustomerId], references: [id], onDelete: Cascade)
+}
+
+model ConsultationBillingSession {
+  id                      String              @id @default(uuid())
+  idempotencyKey          String              @unique
+  consultationType        String              // "CHAT", "AUDIO", "VIDEO"
+  chatId                  String?             @unique
+  callSessionId           String?             @unique
+  consumerId              String
+  expertId                String
+  currency                String              // "NZD", "AUD"
+  rateMinorUnitsPerMinute Int                 // Snapshot of per-minute rate in minor units (e.g. 300 = $3.00)
+  status                  String              @default("FREE_ACTIVE") // FREE_ACTIVE, FREE_EXPIRED, PAID_CONFIRMED, PAID_ACTIVE, COMPLETED, FAILED, CANCELLED
+
+  freeStartedAt           DateTime?
+  freeEndedAt             DateTime?
+  freeSecondsUsed         Int                 @default(0)
+
+  paidConfirmedAt         DateTime?
+  paidStartedAt           DateTime?
+  paidEndedAt             DateTime?
+  paidSecondsUsed         Int                 @default(0)
+
+  grossAmountMinorUnits   Int                 @default(0)
+  platformFeeMinorUnits   Int                 @default(0)
+  expertEarningMinorUnits Int                 @default(0)
+  commissionPct           Float               @default(20.0)
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  chat                    ConsultationChat?   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  callSession             CallSession?        @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  consumer                User                @relation("ConsumerBillingSessions", fields: [consumerId], references: [id])
+  expert                  ExpertProfile       @relation("ExpertBillingSessions", fields: [expertId], references: [id])
+  transaction             PaymentTransaction?
+  expertEarning           ExpertEarning?
+}
+
+model PaymentTransaction {
+  id                      String                      @id @default(uuid())
+  idempotencyKey          String                      @unique
+  billingSessionId        String                      @unique
+  consumerId              String
+  expertId                String
+  amountMinorUnits        Int
+  currency                String                      // "NZD", "AUD"
+  provider                String                      // "STRIPE", "MOCK"
+  providerPaymentIntentId String?
+  providerChargeId        String?
+  status                  String                      // PENDING, AUTHORIZED, CAPTURED, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED
+  receiptUrl              String?
+  failureReason           String?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  billingSession          ConsultationBillingSession  @relation(fields: [billingSessionId], references: [id], onDelete: Cascade)
+  consumer                User                        @relation("ConsumerTransactions", fields: [consumerId], references: [id])
+  expert                  ExpertProfile               @relation("ExpertTransactions", fields: [expertId], references: [id])
+  refunds                 Refund[]
+}
+
+model Refund {
+  id                String              @id @default(uuid())
+  transactionId     String
+  amountMinorUnits  Int
+  currency          String
+  reason            String
+  initiatedByUserId String?
+  providerRefundId  String?
+  status            String              @default("SUCCEEDED") // SUCCEEDED, FAILED
+  createdAt         DateTime            @default(now())
+
+  transaction       PaymentTransaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  initiatedBy       User?               @relation("AdminRefunds", fields: [initiatedByUserId], references: [id])
+}
+
+model ExpertEarning {
+  id                    String                      @id @default(uuid())
+  expertId              String
+  billingSessionId      String                      @unique
+  grossMinorUnits       Int
+  platformFeeMinorUnits Int
+  netEarningMinorUnits  Int
+  currency              String
+  status                String                      @default("AVAILABLE") // PENDING, AVAILABLE, PAID_OUT
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  expert                ExpertProfile               @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  billingSession        ConsultationBillingSession  @relation(fields: [billingSessionId], references: [id], onDelete: Cascade)
+}
+
+model ExpertTimeOff {
+  id              String        @id @default(uuid())
+  expertProfileId String
+  startDate       String        // "2026-09-15"
+  endDate         String        // "2026-09-18"
+  startTime       String?       // "09:00"
+  endTime         String?       // "17:00"
+  isAllDay        Boolean       @default(true)
+  reason          String?       // "Annual leave", "Public holiday", etc.
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  expertProfile   ExpertProfile @relation(fields: [expertProfileId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String    // CHAT_REQUEST, INCOMING_AUDIO_CALL, INCOMING_VIDEO_CALL, MISSED_CALL, APPOINTMENT_BOOKED, APPOINTMENT_CONFIRMED, APPOINTMENT_REMINDER, APPOINTMENT_RESCHEDULED, APPOINTMENT_CANCELLED, EXPERT_VERIFICATION_APPROVED, EXPERT_VERIFICATION_REJECTED, PAYMENT_RECEIPT, REFUND_PROCESSED, SYSTEM_ALERT
+  title     String
+  body      String
+  dataJson  String?
+  channel   String    @default("IN_APP") // IN_APP, PUSH, EMAIL
+  priority  String    @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationPreference {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  inAppEnabled         Boolean  @default(true)
+  emailEnabled         Boolean  @default(true)
+  pushEnabled          Boolean  @default(false)
+  chatAlerts           Boolean  @default(true)
+  callAlerts           Boolean  @default(true)
+  bookingUpdates       Boolean  @default(true)
+  appointmentReminders Boolean  @default(true)
+  paymentReceipts      Boolean  @default(true)
+  verificationUpdates  Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  type        String
+  channel     String   // IN_APP, EMAIL, PUSH
+  status      String   // DELIVERED, SENT_CONSOLE, FAILED, SKIPPED_PREFERENCE
+  provider    String   // DevelopmentEmailProvider, ResendEmailProvider, WebPush, SocketIO
+  referenceId String?
+  createdAt   DateTime @default(now())
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PhoneVerification {
+  id          String   @id @default(uuid())
+  phoneNumber String   // E.164 normalized phone, e.g. +64211234567
+  otpHash     String   // SHA-256 hash of 6-digit OTP
+  expiresAt   DateTime
+  attempts    Int      @default(0)
+  lastSentAt  DateTime @default(now())
+  verified    Boolean  @default(false)
+  reason      String   @default("SIGNUP") // SIGNUP, LOGIN, PHONE_CHANGE
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([phoneNumber])
+}

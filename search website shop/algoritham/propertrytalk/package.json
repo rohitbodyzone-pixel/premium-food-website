@@ -1,0 +1,19 @@
+{
+  "name": "propertytalk-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "concurrently -n \"backend,customer,expert,admin\" -c \"blue,green,yellow,magenta\" \"npm run dev --prefix server\" \"npm run dev:customer --prefix client\" \"npm run dev:expert --prefix client\" \"npm run dev:admin --prefix client\"",
+    "dev:backend": "npm run dev --prefix server",
+    "dev:customer": "npm run dev:customer --prefix client",
+    "dev:expert": "npm run dev:expert --prefix client",
+    "dev:admin": "npm run dev:admin --prefix client",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "start": "npm run start --prefix server",
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

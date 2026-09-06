@@ -11,3 +11,19 @@ Thumbs.db
 # Temporary & logs
 node_modules/
 *.log
+
+# Environment variables & secrets (CRITICAL: Never commit real secrets to GitHub)
+.env
+.env.*
+!*.env.example
+
+# SQLite Database Binaries
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+dev.db
+
+# Production build outputs
+dist/
+build/
