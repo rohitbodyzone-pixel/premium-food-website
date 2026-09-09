@@ -187,11 +187,11 @@ export const PaymentsView: React.FC = () => {
             <span
               className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
                 overview?.isMock
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
               }`}
             >
-              Mode: {overview?.isMock ? 'Mock Development' : 'Live Stripe'}
+              Mode: {overview?.isMock ? 'Mock Development' : 'Stripe (TEST MODE)'}
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
@@ -368,9 +368,14 @@ export const PaymentsView: React.FC = () => {
                         <span className="text-slate-200 block">
                           {new Date(tx.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                         </span>
-                        <span className="text-slate-500 text-[10px] block">
-                          {tx.id.substring(0, 8)}...
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-slate-500 text-[10px] block">
+                            {tx.id.substring(0, 8)}...
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            TEST MODE
+                          </span>
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4">

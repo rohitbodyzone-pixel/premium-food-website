@@ -190,6 +190,61 @@ export class StripePaymentProvider implements IPaymentProvider {
     return { status: pi.status };
   }
 
+  async createPaymentIntent(
+    params: any
+  ): Promise<{ paymentIntentId: string; clientSecret: string; status: string }> {
+    const stripe = this.ensureStripe();
+    const intentOptions: Stripe.PaymentIntentCreateParams = {
+      amount: params.amountMinorUnits,
+      currency: params.currency.toLowerCase(),
+      description: params.description || 'PropertyTalk Payment',
+      metadata: params.metadata || {},
+      capture_method: params.captureMethod || 'automatic',
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: 'never',
+      },
+    };
+
+    if (params.customerId) {
+      intentOptions.customer = params.customerId;
+    }
+    if (params.paymentMethodId) {
+      intentOptions.payment_method = params.paymentMethodId;
+    }
+    if (params.confirm) {
+      intentOptions.confirm = true;
+      intentOptions.off_session = true;
+    }
+
+    const requestOptions: Stripe.RequestOptions = {};
+    if (params.idempotencyKey) {
+      requestOptions.idempotencyKey = params.idempotencyKey;
+    }
+
+    const pi = await stripe.paymentIntents.create(intentOptions, requestOptions);
+
+    return {
+      paymentIntentId: pi.id,
+      clientSecret: pi.client_secret || '',
+      status: pi.status,
+    };
+  }
+
+  async retrievePaymentIntent(
+    paymentIntentId: string
+  ): Promise<{ id: string; status: string; amount: number; currency: string; metadata?: Record<string, string> }> {
+    const stripe = this.ensureStripe();
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    return {
+      id: pi.id,
+      status: pi.status,
+      amount: pi.amount,
+      currency: pi.currency.toUpperCase(),
+      metadata: pi.metadata,
+    };
+  }
+
   async refundPayment(
     params: RefundPaymentParams
   ): Promise<{ refundId: string; status: string; amountRefundedMinorUnits: number }> {

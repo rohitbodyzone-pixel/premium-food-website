@@ -273,6 +273,66 @@ router.post('/consultations/:id/confirm-paid', async (req: Request, res: Respons
 });
 
 /**
+ * Customer explicit confirmation to create a PaymentIntent for paid consultation
+ * Preserves 60 seconds free. Charges nothing automatically. Only created upon explicit customer confirmation.
+ */
+router.post('/consultations/:id/create-payment-intent', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { type = 'VIDEO', confirmed } = req.body;
+    const consumerId = req.user!.id;
+
+    if (!confirmed) {
+      res.status(400).json({ error: 'Explicit customer confirmation is required to initiate a paid consultation PaymentIntent' });
+      return;
+    }
+
+    // 1. Fetch server-calculated quote based on expert rates
+    const quote = await billingService.preparePaidQuote({
+      consultationId: id,
+      consultationType: (type || 'VIDEO').toUpperCase() as any,
+      consumerId,
+    });
+
+    // 2. Initial paid increment: 5-minute pre-authorized deposit
+    const amountMinorUnits = quote.rateMinorUnitsPerMinute * 5;
+    const idempotencyKey = `pi_consult_${id}_${consumerId}_${Date.now()}`;
+    const paymentProvider = getPaymentProvider();
+
+    // 3. Create PaymentIntent via payment provider
+    const piResult = await paymentProvider.createPaymentIntent({
+      amountMinorUnits,
+      currency: quote.currency.toLowerCase(),
+      description: `PropertyTalk Paid Consultation (${type}): with ${quote.expertName}`,
+      metadata: {
+        type: 'CONSULTATION_PAID_CONTINUATION',
+        consultationId: id,
+        consumerId,
+        expertId: quote.expertId,
+        rateMinorUnitsPerMinute: String(quote.rateMinorUnitsPerMinute),
+        currency: quote.currency,
+      },
+      idempotencyKey,
+    });
+
+    res.json({
+      success: true,
+      clientSecret: piResult.clientSecret,
+      paymentIntentId: piResult.paymentIntentId,
+      amountMinorUnits,
+      currency: quote.currency,
+      rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+      freeSecondsPreserved: 60,
+      autoChargedAtExpiry: false,
+      message: 'Consultation PaymentIntent created successfully following explicit customer confirmation',
+    });
+  } catch (error: any) {
+    console.error('Error creating consultation payment intent:', error);
+    res.status(400).json({ error: error.message || 'Failed to create consultation payment intent' });
+  }
+});
+
+/**
  * Customer's consultation transaction history
  */
 router.get('/transactions/my', async (req: Request, res: Response) => {
@@ -303,8 +363,8 @@ router.get('/transactions/my', async (req: Request, res: Response) => {
       freeSeconds: tx.billingSession?.freeSecondsUsed || 60,
       paidSeconds: tx.billingSession?.paidSecondsUsed || 0,
       ratePerMinute: tx.billingSession ? tx.billingSession.rateMinorUnitsPerMinute / 100 : 0,
-      expertName: tx.expert.user.name,
-      expertCategory: tx.expert.category.name,
+      expertName: tx.expert ? tx.expert.user.name : 'PropertyTalk Live Viewing',
+      expertCategory: tx.expert ? tx.expert.category.name : 'Live Viewing',
       createdAt: tx.createdAt,
       refundedAmount: tx.refunds.reduce((acc, r) => acc + r.amountMinorUnits, 0) / 100,
     }));
@@ -346,8 +406,8 @@ router.get('/receipt/:id', async (req: Request, res: Response) => {
       receiptNumber: `REC-${tx.id.substring(0, 8).toUpperCase()}`,
       transactionId: tx.id,
       date: tx.createdAt,
-      expertName: tx.expert.user.name,
-      expertCategory: tx.expert.category.name,
+      expertName: tx.expert ? tx.expert.user.name : 'PropertyTalk Live Viewing',
+      expertCategory: tx.expert ? tx.expert.category.name : 'Live Viewing',
       consultationType: tx.billingSession?.consultationType || 'CONSULTATION',
       freeDurationSeconds: tx.billingSession?.freeSecondsUsed || 60,
       paidDurationSeconds: tx.billingSession?.paidSecondsUsed || 0,

@@ -534,14 +534,14 @@ export class BillingService {
       include: { refunds: true, billingSession: true },
     });
 
-    if (isFullRefund) {
+    if (isFullRefund && tx.billingSessionId) {
       await prisma.expertEarning.updateMany({
         where: { billingSessionId: tx.billingSessionId },
         data: { status: 'REFUNDED' as any },
       });
     }
 
-    if (adminUserId) {
+    if (adminUserId && tx.expertId) {
       await prisma.verificationAuditLog.create({
         data: {
           expertProfileId: tx.expertId,

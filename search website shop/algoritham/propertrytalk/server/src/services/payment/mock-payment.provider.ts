@@ -178,6 +178,60 @@ export class MockPaymentProvider implements IPaymentProvider {
     return { status: 'canceled' };
   }
 
+  async createPaymentIntent(
+    params: any
+  ): Promise<{ paymentIntentId: string; clientSecret: string; status: string }> {
+    if (params.idempotencyKey && this.idempotencyCache.has(params.idempotencyKey)) {
+      return this.idempotencyCache.get(params.idempotencyKey);
+    }
+
+    const paymentIntentId = `mock_pi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const chargeId = `mock_ch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    const mockPi: MockPaymentIntent = {
+      id: paymentIntentId,
+      customerId: params.customerId || 'mock_cus_default',
+      paymentMethodId: params.paymentMethodId || 'mock_pm_default',
+      amount: params.amountMinorUnits,
+      currency: params.currency,
+      status: params.confirm ? 'succeeded' : 'requires_capture',
+      chargeId,
+    };
+
+    this.paymentIntents.set(paymentIntentId, mockPi);
+
+    const result = {
+      paymentIntentId,
+      clientSecret: `${paymentIntentId}_secret_mock`,
+      status: mockPi.status,
+    };
+
+    if (params.idempotencyKey) {
+      this.idempotencyCache.set(params.idempotencyKey, result);
+    }
+    return result;
+  }
+
+  async retrievePaymentIntent(
+    paymentIntentId: string
+  ): Promise<{ id: string; status: string; amount: number; currency: string; metadata?: Record<string, string> }> {
+    const pi = this.paymentIntents.get(paymentIntentId);
+    if (pi) {
+      return {
+        id: pi.id,
+        status: pi.status,
+        amount: pi.amount,
+        currency: pi.currency.toUpperCase(),
+      };
+    }
+    return {
+      id: paymentIntentId,
+      status: 'succeeded',
+      amount: 2000,
+      currency: 'NZD',
+    };
+  }
+
   async refundPayment(
     params: RefundPaymentParams
   ): Promise<{ refundId: string; status: string; amountRefundedMinorUnits: number }> {

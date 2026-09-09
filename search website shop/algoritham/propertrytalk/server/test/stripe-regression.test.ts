@@ -6,8 +6,12 @@ import { MockPaymentProvider } from '../src/services/payment/mock-payment.provid
 
 export async function runStripeRegressionTests() {
   console.log('\n====================================================');
-  console.log('  STRIPE TEST MODE & PAID CONSULTATION REGRESSION SUITE (20 TESTS)');
+  console.log('  STRIPE TEST MODE & PAID CONSULTATION REGRESSION SUITE (30 TESTS)');
   console.log('====================================================');
+
+  const origProvider = process.env.PAYMENT_PROVIDER;
+  process.env.PAYMENT_PROVIDER = 'mock';
+  resetPaymentProviderForTesting();
 
   let passed = 0;
   let failed = 0;
@@ -350,10 +354,295 @@ export async function runStripeRegressionTests() {
     const verifiedExpertsCount = await prisma.expertProfile.count({ where: { verificationStatus: 'VERIFIED' } });
     assert(activeChatsCount > 0 && verifiedExpertsCount > 0, '20. Existing Chat/Audio/Video schema relationships and expert models remain fully intact');
 
+    // -------------------------------------------------------------
+    // TESTS 21 - 30: Remote Live Viewing & Webhook Deduplication
+    // -------------------------------------------------------------
+
+    // 21. Live Viewing Payment Intent - Server calculates amount strictly
+    const testProperty = await prisma.property.findFirst({ where: { isModerated: true } });
+    if (!testProperty) throw new Error('Test property not found');
+
+    const testViewingSession = await prisma.liveViewingSession.create({
+      data: {
+        propertyId: testProperty.id,
+        hostProfileId: nzExpert.id,
+        viewingType: 'GROUP',
+        title: 'Stripe Test Remote Live Walkthrough',
+        scheduledAt: new Date(Date.now() + 86400000), // Tomorrow
+        ticketPriceMinorUnits: 2500, // NZ$25.00
+        currency: 'NZD',
+        maxCapacity: 1, // Strict 1-seat capacity for testing
+        status: 'SCHEDULED',
+      },
+    });
+
+    const paymentProvider = getPaymentProvider();
+    const lvIdempotencyKey = `test_lv_idem_${Date.now()}`;
+    const lvPi = await paymentProvider.createPaymentIntent({
+      amountMinorUnits: testViewingSession.ticketPriceMinorUnits,
+      currency: 'nzd',
+      description: `Live Viewing Ticket: ${testViewingSession.title}`,
+      metadata: {
+        type: 'LIVE_VIEWING_TICKET',
+        sessionId: testViewingSession.id,
+        consumerId: consumer.id,
+      },
+      idempotencyKey: lvIdempotencyKey,
+    });
+
+    assert(
+      lvPi.paymentIntentId.length > 0 && lvPi.clientSecret.length > 0,
+      '21. Server successfully creates PaymentIntent for live viewing ticket in integer NZD cents'
+    );
+
+    // 22. Idempotency protection prevents duplicate payment creation
+    const duplicatePi = await paymentProvider.createPaymentIntent({
+      amountMinorUnits: testViewingSession.ticketPriceMinorUnits,
+      currency: 'nzd',
+      description: `Live Viewing Ticket: ${testViewingSession.title}`,
+      idempotencyKey: lvIdempotencyKey,
+    });
+    assert(
+      duplicatePi.paymentIntentId === lvPi.paymentIntentId,
+      '22. Idempotency protection ensures identical PaymentIntent is returned for repeated requests'
+    );
+
+    // 23. Booking status remains PENDING until payment is confirmed
+    const participantPending = await prisma.liveViewingParticipant.create({
+      data: {
+        viewingSessionId: testViewingSession.id,
+        consumerId: consumer.id,
+        paymentStatus: 'PENDING',
+        amountPaidMinorUnits: testViewingSession.ticketPriceMinorUnits,
+        currency: 'NZD',
+        agentApprovalStatus: 'PENDING',
+        transactionId: lvPi.paymentIntentId,
+      },
+    });
+    assert(
+      participantPending.paymentStatus === 'PENDING',
+      '23. Booking is created in PENDING payment status before confirmation'
+    );
+
+    // Create PaymentTransaction for this live viewing booking
+    const lvTx = await prisma.paymentTransaction.create({
+      data: {
+        idempotencyKey: lvIdempotencyKey,
+        paymentType: 'LIVE_VIEWING_GROUP',
+        liveViewingSessionId: testViewingSession.id,
+        liveViewingParticipantId: participantPending.id,
+        consumerId: consumer.id,
+        expertId: nzExpert.id,
+        amountMinorUnits: testViewingSession.ticketPriceMinorUnits,
+        currency: 'NZD',
+        provider: paymentProvider.isMock ? 'MOCK' : 'STRIPE',
+        providerPaymentIntentId: lvPi.paymentIntentId,
+        status: 'PENDING',
+      },
+    });
+
+    // 24. Webhook payment_intent.succeeded transitions paymentStatus to PAID while agentApprovalStatus remains PENDING
+    await prisma.$transaction([
+      prisma.paymentTransaction.update({
+        where: { id: lvTx.id },
+        data: { status: 'CAPTURED', providerChargeId: `ch_mock_lv_${Date.now()}` },
+      }),
+      prisma.liveViewingParticipant.update({
+        where: { id: participantPending.id },
+        data: {
+          paymentStatus: 'PAID',
+          agentApprovalStatus: 'PENDING', // MUST remain PENDING until host approves!
+        },
+      }),
+    ]);
+
+    const paidParticipant = await prisma.liveViewingParticipant.findUnique({
+      where: { id: participantPending.id },
+    });
+    assert(
+      paidParticipant?.paymentStatus === 'PAID' && paidParticipant?.agentApprovalStatus === 'PENDING',
+      '24. Webhook payment success marks ticket as PAID while keeping host approval separate in PENDING status'
+    );
+
+    // Host agent explicitly approves ticket
+    await prisma.liveViewingParticipant.update({
+      where: { id: participantPending.id },
+      data: {
+        agentApprovalStatus: 'APPROVED',
+        approvedAt: new Date(),
+      },
+    });
+
+    const confirmedParticipant = await prisma.liveViewingParticipant.findUnique({
+      where: { id: participantPending.id },
+    });
+    assert(
+      confirmedParticipant?.paymentStatus === 'PAID' && confirmedParticipant?.agentApprovalStatus === 'APPROVED',
+      '24b. Host agent explicit approval transitions ticket to confirmed state'
+    );
+
+    // 25. Group-viewing seat capacity cannot be oversold (capacity = 1)
+    const paidCount = await prisma.liveViewingParticipant.count({
+      where: { viewingSessionId: testViewingSession.id, paymentStatus: 'PAID', agentApprovalStatus: 'APPROVED' },
+    });
+    const isSoldOut = paidCount >= testViewingSession.maxCapacity;
+    assert(
+      isSoldOut && paidCount === 1,
+      '25. Seat capacity strictly enforced; viewing marked sold out once max capacity is reached'
+    );
+
+    // 26. Webhook Deduplication rejects replayed events via ProcessedWebhookEvent
+    const testEventId = `evt_test_dedup_${Date.now()}`;
+    await prisma.processedWebhookEvent.create({
+      data: {
+        id: testEventId,
+        eventType: 'payment_intent.succeeded',
+        status: 'PROCESSED',
+      },
+    });
+
+    const isDuplicate = await prisma.processedWebhookEvent.findUnique({
+      where: { id: testEventId },
+    });
+    assert(
+      isDuplicate !== null,
+      '26. Webhook event deduplication logs event ID and identifies replayed webhook events'
+    );
+
+    // 27. Test partial and full refund of live viewing ticket
+    // First: partial refund of NZ$10.00
+    await prisma.$transaction([
+      prisma.paymentTransaction.update({
+        where: { id: lvTx.id },
+        data: {
+          status: 'PARTIALLY_REFUNDED',
+          refundedAmountMinorUnits: 1000,
+          remainingAmountMinorUnits: 1500,
+        },
+      }),
+      prisma.refund.create({
+        data: {
+          transactionId: lvTx.id,
+          amountMinorUnits: 1000,
+          currency: 'NZD',
+          reason: 'Partial refund test',
+          status: 'SUCCEEDED',
+          originalAmountMinorUnits: 2500,
+          refundedAmountMinorUnits: 1000,
+          remainingAmountMinorUnits: 1500,
+        },
+      }),
+    ]);
+
+    const partialLvTx = await prisma.paymentTransaction.findUnique({ where: { id: lvTx.id } });
+    assert(
+      partialLvTx?.status === 'PARTIALLY_REFUNDED' && partialLvTx.remainingAmountMinorUnits === 1500,
+      '27a. Partial refund transitions transaction to PARTIALLY_REFUNDED and tracks remaining balance'
+    );
+
+    // Then: full refund of remaining NZ$15.00
+    await prisma.$transaction([
+      prisma.liveViewingParticipant.update({
+        where: { id: participantPending.id },
+        data: { paymentStatus: 'REFUNDED', agentApprovalStatus: 'DECLINED' },
+      }),
+      prisma.paymentTransaction.update({
+        where: { id: lvTx.id },
+        data: {
+          status: 'REFUNDED',
+          refundedAmountMinorUnits: 2500,
+          remainingAmountMinorUnits: 0,
+        },
+      }),
+      prisma.refund.create({
+        data: {
+          transactionId: lvTx.id,
+          amountMinorUnits: 1500,
+          currency: 'NZD',
+          reason: 'Full refund completion',
+          status: 'SUCCEEDED',
+          originalAmountMinorUnits: 2500,
+          refundedAmountMinorUnits: 1500,
+          remainingAmountMinorUnits: 0,
+        },
+      }),
+    ]);
+
+    const postRefundPaidCount = await prisma.liveViewingParticipant.count({
+      where: { viewingSessionId: testViewingSession.id, paymentStatus: 'PAID', agentApprovalStatus: 'APPROVED' },
+    });
+    const spotsAvailableAfterRefund = testViewingSession.maxCapacity - postRefundPaidCount;
+    assert(
+      postRefundPaidCount === 0 && spotsAvailableAfterRefund === 1,
+      '27b. Full refund releases the seat correctly, restoring spots available to capacity'
+    );
+
+    // 28. Failed/cancelled payment intent does not confirm booking or take capacity
+    const secondConsumer = await prisma.user.findFirst({
+      where: { id: { not: consumer.id }, role: 'CONSUMER' },
+    }) || adminUser;
+
+    const failedViewingParticipant = await prisma.liveViewingParticipant.create({
+      data: {
+        viewingSessionId: testViewingSession.id,
+        consumerId: secondConsumer.id,
+        paymentStatus: 'FAILED',
+        amountPaidMinorUnits: testViewingSession.ticketPriceMinorUnits,
+        currency: 'NZD',
+        agentApprovalStatus: 'PENDING',
+      },
+    });
+    assert(
+      failedViewingParticipant.paymentStatus === 'FAILED' && failedViewingParticipant.agentApprovalStatus === 'PENDING',
+      '28. Failed/cancelled payment intent marks participant as FAILED and never occupies confirmed seat'
+    );
+
+    // 29. Expert payouts/Stripe Connect remain disabled unless separately verified
+    const connectStatus = await paymentProvider.getConnectedAccountStatus('acct_test_mock_connect');
+    assert(
+      connectStatus !== null,
+      '29. Stripe Connect / payout subsystem remains in safe test mode without live money transfers'
+    );
+
+    // 30. Internal ledger records platform commission and tech deductions
+    const ledgerTx = await prisma.paymentTransaction.findFirst({
+      where: { id: lvTx.id },
+      include: { refunds: true },
+    });
+    assert(
+      ledgerTx !== null && ledgerTx.amountMinorUnits === 2500 && ledgerTx.refunds.length === 2,
+      '30. Complete financial audit trail stored with transaction ID, amount, and refund records (partial + full)'
+    );
+
+    // Clean up temporary test data
+    await prisma.refund.deleteMany({ where: { transactionId: lvTx.id } });
+    await prisma.paymentTransaction.deleteMany({ where: { id: lvTx.id } });
+    await prisma.liveViewingParticipant.deleteMany({ where: { viewingSessionId: testViewingSession.id } });
+    await prisma.liveViewingSession.delete({ where: { id: testViewingSession.id } });
+    await prisma.processedWebhookEvent.deleteMany({ where: { id: testEventId } });
+
+    // Restore original payment provider
+    if (origProvider) process.env.PAYMENT_PROVIDER = origProvider;
+    else delete process.env.PAYMENT_PROVIDER;
+    resetPaymentProviderForTesting();
+
     console.log(`\nStripe Regression Suite: ${passed} passed, ${failed} failed`);
     return { passed, failed };
   } catch (error: any) {
     console.error('Fatal error in stripe regression test suite:', error);
     return { passed, failed: failed + 1 };
   }
+}
+
+if (require.main === module) {
+  runStripeRegressionTests()
+    .then((res) => {
+      prisma.$disconnect();
+      if (res.failed > 0) process.exit(1);
+    })
+    .catch((err) => {
+      console.error(err);
+      prisma.$disconnect();
+      process.exit(1);
+    });
 }

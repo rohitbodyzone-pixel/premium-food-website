@@ -415,9 +415,12 @@ model ConsultationBillingSession {
 model PaymentTransaction {
   id                      String                      @id @default(uuid())
   idempotencyKey          String                      @unique
-  billingSessionId        String                      @unique
+  billingSessionId        String?                     @unique
+  paymentType             String                      @default("CONSULTATION") // "CONSULTATION", "LIVE_VIEWING_GROUP", "LIVE_VIEWING_PRIVATE"
+  liveViewingSessionId    String?
+  liveViewingParticipantId String?
   consumerId              String
-  expertId                String
+  expertId                String?
   amountMinorUnits        Int
   currency                String                      // "NZD", "AUD"
   provider                String                      // "STRIPE", "MOCK"
@@ -426,28 +429,40 @@ model PaymentTransaction {
   status                  String                      // PENDING, AUTHORIZED, CAPTURED, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED
   receiptUrl              String?
   failureReason           String?
+  refundedAmountMinorUnits Int                        @default(0)
+  remainingAmountMinorUnits Int?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
 
-  billingSession          ConsultationBillingSession  @relation(fields: [billingSessionId], references: [id], onDelete: Cascade)
+  billingSession          ConsultationBillingSession? @relation(fields: [billingSessionId], references: [id], onDelete: Cascade)
   consumer                User                        @relation("ConsumerTransactions", fields: [consumerId], references: [id])
-  expert                  ExpertProfile               @relation("ExpertTransactions", fields: [expertId], references: [id])
+  expert                  ExpertProfile?              @relation("ExpertTransactions", fields: [expertId], references: [id])
   refunds                 Refund[]
 }
 
-model Refund {
-  id                String              @id @default(uuid())
-  transactionId     String
-  amountMinorUnits  Int
-  currency          String
-  reason            String
-  initiatedByUserId String?
-  providerRefundId  String?
-  status            String              @default("SUCCEEDED") // SUCCEEDED, FAILED
-  createdAt         DateTime            @default(now())
+model ProcessedWebhookEvent {
+  id          String   @id // e.g. evt_123...
+  eventType   String
+  status      String   @default("PROCESSED") // PROCESSING, PROCESSED, IGNORED, FAILED
+  processedAt DateTime @default(now())
+}
 
-  transaction       PaymentTransaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  initiatedBy       User?               @relation("AdminRefunds", fields: [initiatedByUserId], references: [id])
+model Refund {
+  id                        String              @id @default(uuid())
+  transactionId             String
+  amountMinorUnits          Int
+  currency                  String
+  reason                    String
+  initiatedByUserId         String?
+  providerRefundId          String?
+  status                    String              @default("SUCCEEDED") // SUCCEEDED, FAILED
+  originalAmountMinorUnits  Int?
+  refundedAmountMinorUnits  Int?
+  remainingAmountMinorUnits Int?
+  createdAt                 DateTime            @default(now())
+
+  transaction               PaymentTransaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  initiatedBy               User?               @relation("AdminRefunds", fields: [initiatedByUserId], references: [id])
 }
 
 model ExpertEarning {
@@ -655,6 +670,8 @@ model LiveViewingParticipant {
   leftAt                  DateTime?
   recordingConsentGiven   Boolean  @default(false)
   transactionId           String?
+  reservationExpiresAt    DateTime? // Configurable expiry for PENDING payment reservations
+  refundStatus            String?   // null, "REFUND_PENDING", "REFUND_FAILED", "REFUNDED"
   
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt

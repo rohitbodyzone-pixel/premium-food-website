@@ -45,6 +45,24 @@ export interface RefundPaymentParams {
   idempotencyKey: string;
 }
 
+export interface CreatePaymentIntentParams {
+  amountMinorUnits: number;
+  currency: string;
+  customerId?: string;
+  paymentMethodId?: string;
+  description?: string;
+  metadata?: Record<string, string>;
+  idempotencyKey?: string;
+  captureMethod?: 'automatic' | 'manual';
+  confirm?: boolean;
+}
+
+export interface PaymentIntentResult {
+  paymentIntentId: string;
+  clientSecret: string;
+  status: string;
+}
+
 export interface ConnectedAccountResult {
   accountId: string;
   onboardingUrl?: string;
@@ -85,6 +103,14 @@ export interface IPaymentProvider {
   ): Promise<{ paymentIntentId: string; chargeId: string; status: string }>;
 
   cancelAuthorization(paymentIntentId: string): Promise<{ status: string }>;
+
+  createPaymentIntent(
+    params: CreatePaymentIntentParams
+  ): Promise<PaymentIntentResult>;
+
+  retrievePaymentIntent(
+    paymentIntentId: string
+  ): Promise<{ id: string; status: string; amount: number; currency: string; metadata?: Record<string, string> }>;
 
   refundPayment(
     params: RefundPaymentParams

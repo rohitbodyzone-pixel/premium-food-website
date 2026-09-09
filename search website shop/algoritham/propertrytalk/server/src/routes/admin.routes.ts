@@ -1031,7 +1031,7 @@ router.get('/payments/transactions', async (req: Request, res: Response) => {
         (t) =>
           t.consumer.name.toLowerCase().includes(q) ||
           (t.consumer.email && t.consumer.email.toLowerCase().includes(q)) ||
-          t.expert.user.name.toLowerCase().includes(q) ||
+          (t.expert?.user?.name && t.expert.user.name.toLowerCase().includes(q)) ||
           t.id.toLowerCase().includes(q)
       );
     }
@@ -1039,13 +1039,21 @@ router.get('/payments/transactions', async (req: Request, res: Response) => {
     const formatted = filtered.map((tx) => ({
       id: tx.id,
       consumer: tx.consumer,
-      expert: {
-        id: tx.expert.id,
-        name: tx.expert.user.name,
-        email: tx.expert.user.email,
-        category: tx.expert.category.name,
-        countryCode: tx.expert.countryCode,
-      },
+      expert: tx.expert
+        ? {
+            id: tx.expert.id,
+            name: tx.expert.user.name,
+            email: tx.expert.user.email,
+            category: tx.expert.category.name,
+            countryCode: tx.expert.countryCode,
+          }
+        : {
+            id: 'platform',
+            name: 'PropertyTalk Live Viewing',
+            email: 'system@propertytalk.co.nz',
+            category: 'Live Viewing',
+            countryCode: 'NZ',
+          },
       amount: tx.amountMinorUnits / 100,
       currency: tx.currency,
       currencySymbol: tx.currency === 'AUD' ? 'A$' : 'NZ$',
