@@ -6,20 +6,43 @@ function adminHtmlFallbackPlugin() {
     name: 'admin-html-fallback',
     configureServer(server: any) {
       server.middlewares.use((req: any, _res: any, next: any) => {
-        const url = req.url || '';
+        const parsedUrl = new URL(req.url || '/', 'http://localhost');
+        const pathname = parsedUrl.pathname;
+
+        // Never serve index.html (Customer app) on admin portal (5175)
+        if (pathname === '/index.html' || pathname === '/') {
+          req.url = '/admin.html' + (parsedUrl.search || '');
+          return next();
+        }
+
         // Pass through assets, modules, APIs, and websockets
         if (
-          url.startsWith('/api') ||
-          url.startsWith('/socket.io') ||
-          url.startsWith('/@') ||
-          url.startsWith('/src') ||
-          url.startsWith('/node_modules') ||
-          url.includes('.')
+          pathname.startsWith('/api') ||
+          pathname.startsWith('/socket.io') ||
+          pathname.startsWith('/@') ||
+          pathname.startsWith('/src') ||
+          pathname.startsWith('/node_modules') ||
+          pathname.startsWith('/assets') ||
+          pathname.endsWith('.ts') ||
+          pathname.endsWith('.tsx') ||
+          pathname.endsWith('.js') ||
+          pathname.endsWith('.jsx') ||
+          pathname.endsWith('.css') ||
+          pathname.endsWith('.svg') ||
+          pathname.endsWith('.png') ||
+          pathname.endsWith('.jpg') ||
+          pathname.endsWith('.jpeg') ||
+          pathname.endsWith('.ico') ||
+          pathname.endsWith('.woff') ||
+          pathname.endsWith('.woff2') ||
+          pathname.endsWith('.ttf') ||
+          pathname.endsWith('.json')
         ) {
           return next();
         }
-        // Rewrite navigation requests to admin.html
-        req.url = '/admin.html';
+
+        // Rewrite all navigation requests to admin.html
+        req.url = '/admin.html' + (parsedUrl.search || '');
         next();
       });
     },

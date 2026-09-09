@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../db/prisma';
 import { requireAuth } from '../middleware/auth.middleware';
-import { loginRateLimiter } from '../middleware/rate-limiter.middleware';
+import { phoneOtpRateLimiter } from '../middleware/rate-limiter.middleware';
 import { phoneService, PhoneService, normalizePhoneNumber, maskPhoneNumber } from '../services/phone.service';
 import { getSmsProvider } from '../services/sms/sms-provider.factory';
 import { getEmailProvider } from '../services/email/email-provider.factory';
@@ -22,7 +22,7 @@ function setAuthCookie(res: Response, token: string) {
 }
 
 // 1. Send OTP (Supports SIGNUP, LOGIN, PHONE_CHANGE)
-router.post('/send-otp', loginRateLimiter, async (req: Request, res: Response) => {
+router.post('/send-otp', phoneOtpRateLimiter, async (req: Request, res: Response) => {
   try {
     const { phoneNumber, countryCode, reason = 'LOGIN' } = req.body;
 
@@ -98,7 +98,7 @@ router.post('/send-otp', loginRateLimiter, async (req: Request, res: Response) =
 });
 
 // 2. Verify Signup (Creates Account with Verified Phone)
-router.post('/verify-signup', loginRateLimiter, async (req: Request, res: Response) => {
+router.post('/verify-signup', phoneOtpRateLimiter, async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -169,6 +169,12 @@ router.post('/verify-signup', loginRateLimiter, async (req: Request, res: Respon
         lastLoginAt: new Date(),
       },
     });
+
+    // Link verified phone record to newly created user
+    await prisma.phoneVerification.updateMany({
+      where: { phoneNumber: e164, reason: 'SIGNUP', verified: true },
+      data: { userId: user.id },
+    }).catch(() => {});
 
     let expertProfile = null;
     let redirectTo = '/';
@@ -242,7 +248,7 @@ router.post('/verify-signup', loginRateLimiter, async (req: Request, res: Respon
 });
 
 // 3. Phone OTP Login
-router.post('/login', loginRateLimiter, async (req: Request, res: Response) => {
+router.post('/login', phoneOtpRateLimiter, async (req: Request, res: Response) => {
   try {
     const { phoneNumber, countryCode, otp, targetPortal } = req.body;
 

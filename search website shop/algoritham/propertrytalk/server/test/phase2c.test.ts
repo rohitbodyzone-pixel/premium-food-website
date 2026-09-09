@@ -121,17 +121,17 @@ export async function runPhase2CTests() {
     assert(cooldownBlocked, '4. Resend verification token strictly enforces 60s cooldown');
 
     // Test 5: Forgot password email generates reset token and routes to appropriate portal URL
-    const consumerReset = await passwordResetService.requestPasswordReset(testConsumer.email);
+    const consumerReset = await passwordResetService.requestPasswordReset(testConsumer.email!);
     assert(consumerReset.devResetUrl?.includes(':5173') === true, '5a. Consumer password reset routes to Customer Portal (:5173)');
 
-    const expertReset = await passwordResetService.requestPasswordReset(expertUser.email);
+    const expertReset = await passwordResetService.requestPasswordReset(expertUser.email!);
     assert(expertReset.devResetUrl?.includes(':5174') === true, '5b. Expert password reset routes to Expert Portal (:5174)');
 
-    const adminReset = await passwordResetService.requestPasswordReset(adminUser.email);
+    const adminReset = await passwordResetService.requestPasswordReset(adminUser.email!);
     assert(adminReset.devResetUrl?.includes(':5175') === true, '5c. Super Admin password reset routes to Super Admin Portal (:5175)');
 
     // Test 6: Forgot password enforces 60s rate limit cooldown (does not generate new token within 60s)
-    const cooldownReq = await passwordResetService.requestPasswordReset(testConsumer.email);
+    const cooldownReq = await passwordResetService.requestPasswordReset(testConsumer.email!);
     assert(!cooldownReq.rawToken, '6. Forgot password enforces 60s rate limit cooldown');
 
     // Test 7: Password reset consumes token and invalidates it

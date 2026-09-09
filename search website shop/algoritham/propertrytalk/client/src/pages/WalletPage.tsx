@@ -61,6 +61,8 @@ export const WalletPage: React.FC = () => {
   const [setAsDefault, setSetAsDefault] = useState(true);
   const [submittingCard, setSubmittingCard] = useState(false);
 
+  const [paymentConfig, setPaymentConfig] = useState<any>(null);
+
   // Selected Receipt Modal
   const [activeReceipt, setActiveReceipt] = useState<ConsultationReceiptData | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
@@ -68,12 +70,14 @@ export const WalletPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [txRes, pmRes] = await Promise.all([
+      const [txRes, pmRes, cfgRes] = await Promise.all([
         api.get<TransactionItem[]>('/payments/transactions/my').catch(() => []),
         api.get<PaymentMethod[]>('/payments/methods').catch(() => []),
+        api.get<any>('/payments/config').catch(() => null),
       ]);
       setTransactions(txRes || []);
       setPaymentMethods(pmRes || []);
+      if (cfgRes) setPaymentConfig(cfgRes);
     } catch (e) {
       console.error('Error fetching wallet data:', e);
     } finally {
@@ -87,17 +91,29 @@ export const WalletPage: React.FC = () => {
 
   const handleAddCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingCard) return;
     setSubmittingCard(true);
     try {
       const [expMonthStr, expYearStr] = cardExp.split('/');
-      await api.post('/payments/methods', {
-        cardNumber: cardNumber.replace(/\s+/g, ''),
-        cardLast4: cardNumber.slice(-4),
-        cardBrand: cardNumber.startsWith('4') ? 'visa' : 'mastercard',
+      const cleanNum = cardNumber.replace(/\s+/g, '');
+      const payload: any = {
+        cardLast4: cleanNum.slice(-4),
+        cardBrand: cleanNum.startsWith('4') ? 'visa' : 'mastercard',
         expMonth: parseInt(expMonthStr || '12', 10),
         expYear: parseInt(`20${expYearStr || '28'}`, 10),
         setAsDefault,
-      });
+      };
+
+      if (paymentConfig && !paymentConfig.isMock) {
+        // Map test card numbers to Stripe test tokens in client tokenization flow
+        if (cleanNum.endsWith('4242')) payload.token = 'tok_visa';
+        else if (cleanNum.endsWith('0002') || cleanNum.endsWith('0003')) payload.token = 'tok_chargeCustomerFail';
+        else payload.token = 'tok_visa';
+      } else {
+        payload.cardNumber = cleanNum;
+      }
+
+      await api.post('/payments/methods', payload);
 
       setShowAddCard(false);
       fetchData();

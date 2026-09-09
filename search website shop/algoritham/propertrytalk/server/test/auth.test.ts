@@ -111,9 +111,9 @@ export async function runAuthTests() {
         },
       });
     }
-    assert(userRecord.failedLoginAttempts === 5, 'Recorded 5 failed login attempts');
-    assert(userRecord.lockoutUntil !== null, 'Account lockout timestamp generated');
-    assert(userRecord.lockoutUntil!.getTime() > Date.now(), 'Account is locked for future window');
+    assert(userRecord !== null && userRecord.failedLoginAttempts === 5, 'Recorded 5 failed login attempts');
+    assert(userRecord !== null && userRecord.lockoutUntil !== null, 'Account lockout timestamp generated');
+    assert(userRecord !== null && userRecord.lockoutUntil!.getTime() > Date.now(), 'Account is locked for future window');
 
     // Reset on successful login
     const restoredUser = await prisma.user.update({

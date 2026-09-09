@@ -10,6 +10,7 @@ import {
   Zap,
   Plus,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import { api } from '../../services/api';
 
@@ -65,7 +66,7 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
       setLoading(true);
       try {
         const [methodsRes, quoteRes] = await Promise.all([
-          api.get<PaymentMethod[]>('/payments/methods').catch(() => ({ data: [] })),
+          api.get<PaymentMethod[]>('/payments/methods').catch(() => []),
           api.post(`/payments/consultations/${consultationId}/prepare-paid`, {
             type: consultationType,
           }).catch(() => null),
@@ -94,17 +95,29 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
 
   const handleAddNewCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addingCard) return;
     setAddingCard(true);
     try {
       const [expMonthStr, expYearStr] = cardExp.split('/');
-      const res = await api.post<any>('/payments/methods', {
-        cardNumber: cardNumber.replace(/\s+/g, ''),
-        cardLast4: cardNumber.slice(-4),
-        cardBrand: cardNumber.startsWith('4') ? 'visa' : 'mastercard',
+      const cleanNum = cardNumber.replace(/\s+/g, '');
+      const payload: any = {
+        cardLast4: cleanNum.slice(-4),
+        cardBrand: cleanNum.startsWith('4') ? 'visa' : 'mastercard',
         expMonth: parseInt(expMonthStr || '12', 10),
         expYear: parseInt(`20${expYearStr || '28'}`, 10),
         setAsDefault: true,
-      });
+      };
+
+      if (quoteDetails?.providerMode === 'STRIPE') {
+        // Map test card numbers to Stripe test tokens in client tokenization flow
+        if (cleanNum.endsWith('4242')) payload.token = 'tok_visa';
+        else if (cleanNum.endsWith('0002') || cleanNum.endsWith('0003')) payload.token = 'tok_chargeCustomerFail';
+        else payload.token = 'tok_visa';
+      } else {
+        payload.cardNumber = cleanNum;
+      }
+
+      const res = await api.post<any>('/payments/methods', payload);
 
       if (res && res.id) {
         setPaymentMethods((prev) => [res, ...prev]);
@@ -119,6 +132,7 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
   };
 
   const handleFinalConfirm = async () => {
+    if (confirming) return;
     setConfirming(true);
     try {
       await onConfirm(selectedMethodId || undefined);
@@ -133,13 +147,13 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden text-white transition-all">
+      <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[90vh] text-white transition-all">
         {/* Step Header */}
-        <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+        <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-bold text-sm text-slate-200">
-              {step === 1 ? 'Free Consultation Concluded' : 'Confirm Paid Continuation'}
+              {step === 1 ? 'Free Consultation Ended' : 'Confirm Paid Continuation'}
             </span>
           </div>
           <div className="text-xs px-2.5 py-1 rounded-full bg-slate-700/60 font-semibold text-slate-300">
@@ -152,34 +166,39 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
           {step === 1 ? (
             /* STEP 1: FREE TIME ENDED */
             <div>
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="w-8 h-8" />
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 border border-emerald-500/30">
+                <Clock className="w-7 h-7" />
               </div>
 
-              <h3 className="text-xl font-extrabold text-center text-white">
-                Your 1 Minute Free is Complete
-              </h3>
-              <p className="text-xs text-slate-300 text-center mt-2 leading-relaxed">
-                Your complimentary consultation with <strong>{expertName}</strong> has ended.
-                The consultation is currently <strong>paused</strong>.
-              </p>
+              <div className="text-center mb-4">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 mb-2">
+                  Complimentary 1-Minute Allowance Completed
+                </span>
+                <h3 className="text-xl font-extrabold text-white">
+                  Free Consultation Ended
+                </h3>
+                <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                  Your complimentary consultation with <strong>{expertName}</strong> has ended.
+                  The session is currently <strong>paused</strong> with zero voice or video transmission.
+                </p>
+              </div>
 
-              <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 my-5 text-left space-y-2">
+              <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 my-4 text-left space-y-2.5">
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700">
-                  <span className="text-slate-400">Consultation Type:</span>
+                  <span className="text-slate-400">Consultation Mode:</span>
                   <span className="font-semibold text-slate-200 uppercase tracking-wide">
-                    {consultationType}
+                    {consultationType === 'CHAT' ? 'Live Chat' : consultationType === 'VIDEO' ? 'HD Video Call' : 'Voice Call'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700">
                   <span className="text-slate-400">Standard Continuation Rate:</span>
-                  <span className="font-bold text-emerald-400">
+                  <span className="font-bold text-emerald-400 text-sm">
                     {activeCurrencySymbol}{activeRate.toFixed(2)} {activeCurrency} / min
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Billing Basis:</span>
-                  <span className="text-slate-300 font-medium">Per-second prorated (No lock-in)</span>
+                  <span className="text-slate-300 font-medium">Prorated per second • No lock-in</span>
                 </div>
               </div>
 
@@ -187,7 +206,7 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
                   <strong>Strict Security Guarantee:</strong> You will <em>never</em> be charged
-                  automatically. You must review the rate and explicitly approve payment in the next step.
+                  automatically. Metering and media resume only after you review the rate and explicitly confirm in Step 2.
                 </span>
               </div>
 
@@ -195,23 +214,23 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
               <div className="space-y-2.5">
                 <button
                   onClick={() => setStep(2)}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <Zap className="w-4 h-4 text-amber-300" />
+                  <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
                   <span>Continue Paid ({activeCurrencySymbol}{activeRate.toFixed(2)}/min)</span>
                 </button>
 
                 <button
                   onClick={onBookAppointment}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
+                  className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
                 >
                   <Calendar className="w-4 h-4 text-emerald-400" />
-                  <span>Book Formal 45-Min Appointment Instead</span>
+                  <span>Book Formal Appointment (No Charge)</span>
                 </button>
 
                 <button
                   onClick={onEnd}
-                  className="w-full py-2 px-4 rounded-xl text-red-400 hover:text-red-300 font-medium text-xs transition flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-4 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 font-medium text-xs transition flex items-center justify-center gap-1.5"
                 >
                   <PhoneOff className="w-3.5 h-3.5" />
                   <span>Conclude Consultation (No Charge)</span>
@@ -414,9 +433,9 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
 
                 <button
                   onClick={onEnd}
-                  className="w-full py-2 px-4 rounded-xl text-slate-400 hover:text-white text-xs transition"
+                  className="w-full py-2.5 px-4 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
                 >
-                  Cancel and End Consultation
+                  Cancel & Conclude (No Charge)
                 </button>
               </div>
             </div>

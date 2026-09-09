@@ -202,3 +202,130 @@ export interface VerificationAuditLog {
   createdAt: string;
   adminUser?: { name: string; email: string };
 }
+
+export interface Property {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  propertyType: 'HOUSE' | 'APARTMENT' | 'TOWNHOUSE' | 'LAND' | 'COMMERCIAL' | 'LIFESTYLE';
+  listingType: 'FOR_SALE' | 'FOR_RENT';
+  priceMinorUnits?: number | null;
+  priceDisplay: string;
+  bedrooms: number;
+  bathrooms: number;
+  parkingSpaces: number;
+  floorAreaM2?: number | null;
+  landAreaM2?: number | null;
+  yearBuilt?: number | null;
+  annualRatesMinorUnits?: number | null;
+  rateableValue?: number | null;
+  currency?: string;
+  streetAddress: string;
+  suburb: string;
+  city: string;
+  countryCode: string;
+  postalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  images: string[];
+  videoUrl?: string | null;
+  documents?: { title: string; fileUrl: string; type: string }[];
+  isPrivateListing: boolean;
+  agentProfileId?: string | null;
+  agentProfile?: Expert;
+  status: 'ACTIVE' | 'UNDER_OFFER' | 'SOLD' | 'RENTED' | 'DRAFT' | 'ARCHIVED';
+  isFeatured: boolean;
+  isModerated: boolean;
+  remoteViewingAvailable: boolean;
+  viewsCount: number;
+  isSaved?: boolean;
+  liveViewingSessions?: LiveViewingSession[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveViewingSession {
+  id: string;
+  propertyId: string;
+  hostProfileId: string;
+  viewingType: 'GROUP' | 'PRIVATE';
+  title?: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  ticketPriceMinorUnits: number;
+  currency: string;
+  minAttendees: number;
+  maxCapacity: number;
+  status: 'SCHEDULED' | 'LIVE' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+  startedAt?: string | null;
+  endedAt?: string | null;
+  streamRoomId?: string | null;
+  streamingCostMinorUnits: number;
+  actualUsageMinutes?: number;
+  streamingCostType?: 'ESTIMATED_TEST' | 'PROVIDER_ACTUAL';
+  isProductionProvider?: boolean;
+  providerCostDetails?: string | null;
+  recordingAllowed: boolean;
+  sellerConsentGiven: boolean;
+  recordingRetentionDays: number;
+  property?: Property;
+  hostProfile?: Expert;
+  confirmedCount?: number;
+  spotsRemaining?: number;
+  minQuotaMet?: boolean;
+  userRole?: 'HOST' | 'CONFIRMED_VIEWER' | 'PENDING_VIEWER' | 'GUEST';
+  createdAt: string;
+}
+
+export interface AgentMiniWebsite {
+  id: string;
+  expertProfileId: string;
+  slug: string;
+  customHeadline?: string;
+  customAbout?: string;
+  coverImageUrl?: string;
+  agencyName?: string;
+  agencyLogoUrl?: string;
+  serviceAreas: string[];
+  socialLinks: Record<string, string>;
+  contactPhone?: string;
+  contactEmail?: string;
+  isPublished: boolean;
+  isModerated: boolean;
+  metaTitle?: string;
+  metaDescription?: string;
+  visitorCount: number;
+  enquiryCount: number;
+  expertProfile?: Expert;
+  articles?: AgentArticle[];
+  structuredData?: any;
+}
+
+export interface AgentArticle {
+  id: string;
+  agentProfileId: string;
+  miniWebsiteId: string;
+  title: string;
+  slug: string;
+  content: string;
+  summary?: string;
+  topic: string;
+  targetCity?: string;
+  targetSuburb?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  status: 'DRAFT' | 'AGENT_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
+  source: 'AI_SUGGESTED' | 'MANUAL';
+  isModerated: boolean;
+  viewsCount: number;
+  publishedAt?: string;
+  lastReviewedAt?: string;
+  agentProfile?: Expert;
+  needsReview?: boolean;
+  daysSinceUpdate?: number;
+  analytics?: { views: number; estimatedImpressions: number; clicks: number };
+  createdAt: string;
+  updatedAt: string;
+}
+

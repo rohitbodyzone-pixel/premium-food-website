@@ -9,12 +9,20 @@ export function getEmailProvider(): IEmailProvider {
     return emailProviderInstance;
   }
 
-  const apiKey = process.env.EMAIL_API_KEY;
+  const explicitProvider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+
+  // If explicitly configured for dev mode, bypass external API checks
+  if (explicitProvider === 'dev') {
+    emailProviderInstance = new DevelopmentEmailProvider();
+    return emailProviderInstance;
+  }
+
+  const apiKey = (process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '').trim();
   const fromAddress = process.env.EMAIL_FROM_ADDRESS;
   const fromName = process.env.EMAIL_FROM_NAME;
 
-  if (apiKey && apiKey.trim().length > 0) {
-    emailProviderInstance = new ResendEmailProvider(apiKey.trim(), fromAddress, fromName);
+  if (explicitProvider === 'resend' || (apiKey && apiKey.length > 0)) {
+    emailProviderInstance = new ResendEmailProvider(apiKey, fromAddress, fromName);
   } else {
     emailProviderInstance = new DevelopmentEmailProvider();
   }

@@ -9,13 +9,32 @@ export function getPaymentProvider(): IPaymentProvider {
     return cachedProvider;
   }
 
+  const explicitProvider = process.env.PAYMENT_PROVIDER?.trim().toLowerCase();
+
+  // If explicitly forced to mock mode, use MockPaymentProvider
+  if (explicitProvider === 'mock') {
+    cachedProvider = new MockPaymentProvider();
+    return cachedProvider;
+  }
+
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (stripeKey && stripeKey.startsWith('sk_')) {
+
+  // STRICT PHASE 3A PRODUCTION SAFETY GUARD: Reject Stripe live mode keys
+  if (stripeKey && stripeKey.startsWith('sk_live_')) {
+    throw new Error(
+      'Stripe live mode is disabled during Phase 3A. Only test credentials (sk_test_) are permitted.'
+    );
+  }
+
+  if (explicitProvider === 'stripe' || (stripeKey && stripeKey.startsWith('sk_test_'))) {
     try {
       cachedProvider = new StripePaymentProvider();
-      console.log('💳 [Payment] Initialized StripePaymentProvider with live/test key.');
+      console.log('💳 [Payment] Initialized StripePaymentProvider with test key.');
       return cachedProvider;
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message?.includes('Stripe live mode is disabled')) {
+        throw e;
+      }
       console.warn('⚠️ [Payment] Failed to load Stripe, falling back to MockPaymentProvider:', e);
     }
   }

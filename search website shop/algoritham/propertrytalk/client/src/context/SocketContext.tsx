@@ -137,6 +137,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [incomingCall, setIncomingCall] = useState<IncomingCallPayload | null>(null);
   const [incomingChat, setIncomingChat] = useState<IncomingChatRequest | null>(null);
   const [activeCall, setActiveCall] = useState<CallSession | null>(null);
+  const activeCallRef = useRef<CallSession | null>(null);
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
   const [timerState, setTimerState] = useState<CallTimerTick | null>(null);
   const [freeExpiredPayload, setFreeExpiredPayload] = useState<FreeTimeExpiredPayload | null>(null);
   const [reviewPendingExpertId, setReviewPendingExpertId] = useState<string | null>(null);
@@ -153,6 +157,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isVideoOff, setIsVideoOff] = useState<boolean>(false);
+  const isMutedRef = useRef<boolean>(false);
+  const isVideoOffRef = useRef<boolean>(false);
 
   const incomingRingInterval = useRef<NodeJS.Timeout | null>(null);
 
@@ -164,6 +170,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setMediaError(null);
     setIsMuted(false);
     setIsVideoOff(false);
+    isMutedRef.current = false;
+    isVideoOffRef.current = false;
   };
 
   useEffect(() => {
@@ -204,7 +212,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Call Accepted by Expert (Consumer receives this)
-    socketInstance.on('call:accepted', async (data: { callSessionId: string; providerSession: any }) => {
+    socketInstance.on('call:accepted', async (data: { callSessionId: string; callType?: 'AUDIO' | 'VIDEO'; providerSession: any }) => {
       console.log('✅ Call accepted by expert. Starting WebRTC negotiation:', data);
       socketInstance.emit('call:join', data.callSessionId);
 
@@ -212,10 +220,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         prev ? { ...prev, status: 'IN_PROGRESS', providerSession: data.providerSession } : null
       );
 
+      const targetCallType = data.callType || activeCallRef.current?.callType || 'AUDIO';
+
       try {
         // Initialize WebRTC as Caller / Offer Creator
         const stream = await webrtcManagerRef.current.initialize({
-          callType: activeCall?.callType || 'AUDIO',
+          callType: targetCallType,
           iceServers: data.providerSession?.iceServers,
           onIceCandidate: (candidate) => {
             socketInstance.emit('call:signal', {
@@ -297,8 +307,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Free 1-minute consultation call expired event from server
     socketInstance.on('call:free_time_expired', (payload: FreeTimeExpiredPayload) => {
       console.log('⏰ Free consultation call expired:', payload);
+      // Strictly pause WebRTC media tracks immediately to prevent voice continuation
+      webrtcManagerRef.current.pauseMedia();
       setFreeExpiredPayload(payload);
       playTone(330, 0.6, 'triangle');
+    });
+
+    // Paid continuation confirmed for call
+    socketInstance.on('call:paid_continuation_activated', (data?: any) => {
+      console.log('⚡ Paid continuation activated for call:', data);
+      webrtcManagerRef.current.resumeMedia({
+        isMuted: isMutedRef.current,
+        isVideoOff: isVideoOffRef.current,
+      });
+      setTimerState((prev) => (prev ? { ...prev, extendedPaid: true, isFreeExpired: false } : null));
+      setFreeExpiredPayload(null);
     });
 
     // Server-Authoritative chat timer tick (1 minute default)
@@ -456,13 +479,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const startCallRequest = async (chatId: string, callType: 'AUDIO' | 'VIDEO'): Promise<CallSession> => {
     const session = await api.post<CallSession>('/calls/request', { chatId, callType });
     setActiveCall(session);
+    activeCallRef.current = session;
 
     if (socket) {
       socket.emit('call:join', session.id);
     }
 
-    // Play ringing tone
-    playTone(440, 0.8);
+    // Play ringing tone safely (won't crash on audio restriction)
+    try {
+      playTone(440, 0.8);
+    } catch (e) {
+      // Audio autoplay policy
+    }
     return session;
   };
 
@@ -476,7 +504,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (socket) {
         socket.emit('call:extend_paid', { callSessionId: activeCall.id, paymentMethodId });
       }
+      webrtcManagerRef.current.resumeMedia({
+        isMuted: isMutedRef.current,
+        isVideoOff: isVideoOffRef.current,
+      });
       setFreeExpiredPayload(null);
+      setTimerState((prev) => (prev ? { ...prev, extendedPaid: true, isFreeExpired: false } : null));
     } catch (err: any) {
       alert(err.message || 'Failed to extend call');
     }
@@ -522,12 +555,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const toggleMute = () => {
     const nextState = !isMuted;
     webrtcManagerRef.current.toggleAudio(!nextState);
+    isMutedRef.current = nextState;
     setIsMuted(nextState);
   };
 
   const toggleVideo = () => {
     const nextState = !isVideoOff;
     webrtcManagerRef.current.toggleVideo(!nextState);
+    isVideoOffRef.current = nextState;
     setIsVideoOff(nextState);
   };
 

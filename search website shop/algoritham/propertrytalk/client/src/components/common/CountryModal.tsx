@@ -65,6 +65,25 @@ export const CountryModal: React.FC = () => {
               </button>
             );
           })}
+
+          {!countries.some(c => c.code === 'AU') && (
+            <div className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/70 opacity-70 cursor-not-allowed">
+              <div className="flex items-center gap-3.5">
+                <span className="text-3xl leading-none grayscale">🇦🇺</span>
+                <div>
+                  <div className="font-semibold text-slate-500 flex items-center gap-2 text-sm">
+                    Australia
+                    <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    NZ-first platform launch. Australian expansion configured in next phase.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 pt-4 border-t border-slate-100 text-center">

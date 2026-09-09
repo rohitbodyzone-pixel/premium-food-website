@@ -40,6 +40,17 @@ interface NotificationPreferences {
   paymentReceipts: boolean;
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export const NotificationsPage: React.FC = () => {
   const { user } = useAuth();
   const { socket } = useSocket();
@@ -62,6 +73,8 @@ export const NotificationsPage: React.FC = () => {
     paymentReceipts: true,
   });
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [pushStatusMessage, setPushStatusMessage] = useState<string | null>(null);
+  const [testingPush, setTestingPush] = useState(false);
 
   const loadNotifications = async () => {
     try {
@@ -158,6 +171,89 @@ export const NotificationsPage: React.FC = () => {
       console.error('Error updating preferences:', err);
     } finally {
       setSavingPrefs(false);
+    }
+  };
+
+  const handleTogglePush = async (enabled: boolean) => {
+    setPushStatusMessage(null);
+    if (!enabled) {
+      try {
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            await sub.unsubscribe();
+            await api.post('/notifications/push/unsubscribe', { endpoint: sub.endpoint });
+          }
+        }
+      } catch (e) {
+        console.warn('Push unsubscribe cleanup error:', e);
+      }
+      await handleSavePreferences({ ...preferences, pushEnabled: false });
+      return;
+    }
+
+    if (!('Notification' in window)) {
+      setPushStatusMessage('Push notifications not supported in this browser.');
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushStatusMessage('Permission not granted by browser.');
+        return;
+      }
+
+      const config = await api.get<{ pushEnabled: boolean; publicKey: string | null; mode: string }>(
+        '/notifications/push/config'
+      );
+
+      if ('serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.register('/sw.js');
+          await navigator.serviceWorker.ready;
+
+          if (config.publicKey) {
+            const convertedVapidKey = urlBase64ToUint8Array(config.publicKey);
+            const subscription = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedVapidKey,
+            });
+
+            await api.post('/notifications/push/subscribe', subscription);
+            setPushStatusMessage('Browser push active with VAPID credentials.');
+          } else {
+            setPushStatusMessage('Push enabled (development mode: in-app real-time alerts active).');
+          }
+        } catch (swErr) {
+          console.warn('Service worker registration note:', swErr);
+          setPushStatusMessage('Push enabled with in-app alert fallback.');
+        }
+      }
+
+      await handleSavePreferences({ ...preferences, pushEnabled: true });
+    } catch (err: any) {
+      console.error('Failed to enable push notifications:', err);
+      setPushStatusMessage(err.message || 'Failed to enable push notifications.');
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    try {
+      setTestingPush(true);
+      setPushStatusMessage('Sending test push notification...');
+      const res = await api.post<{ success: boolean; result: any }>('/notifications/push/test');
+      if (res.success) {
+        setPushStatusMessage('Test push notification sent! Check your device notifications.');
+      } else {
+        setPushStatusMessage('Could not dispatch test push notification.');
+      }
+    } catch (err: any) {
+      console.error('Failed to send test push:', err);
+      setPushStatusMessage(err.response?.data?.error || err.message || 'Failed to send test push');
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -390,6 +486,41 @@ export const NotificationsPage: React.FC = () => {
                   className="w-4 h-4 text-emerald-600 rounded"
                 />
               </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
+                <div>
+                  <span className="font-bold block text-slate-900">Browser Push Notifications</span>
+                  <span className="text-[11px] text-slate-500">Desktop and mobile browser push alerts</span>
+                  {pushStatusMessage && (
+                    <div className="text-[10px] text-emerald-600 font-medium mt-1">
+                      {pushStatusMessage}
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="checkbox"
+                  checked={preferences.pushEnabled}
+                  onChange={(e) => handleTogglePush(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded"
+                />
+              </div>
+
+              {preferences.pushEnabled && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200">
+                  <div>
+                    <span className="font-bold block text-emerald-950 text-xs">Verify Real Push</span>
+                    <span className="text-[11px] text-emerald-700">Send an instant test alert to this phone/browser</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={testingPush}
+                    onClick={handleSendTestPush}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50 shadow-xs"
+                  >
+                    {testingPush ? 'Sending...' : 'Send Test Alert'}
+                  </button>
+                </div>
+              )}
 
               <div className="font-bold text-slate-900 uppercase tracking-wider text-[10px] text-slate-400 pt-2">
                 Alert Types

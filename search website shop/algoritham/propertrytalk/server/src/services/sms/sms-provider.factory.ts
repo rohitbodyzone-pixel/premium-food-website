@@ -10,11 +10,21 @@ export function getSmsProvider(): ISmsProvider {
     return cachedProvider;
   }
 
+  const explicitProvider = process.env.SMS_PROVIDER?.trim().toLowerCase();
+
+  // If explicitly forced to development mode, bypass external Twilio check
+  if (explicitProvider === 'dev') {
+    if (!devProviderInstance) {
+      devProviderInstance = new DevelopmentSmsProvider();
+    }
+    return devProviderInstance;
+  }
+
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioToken = process.env.TWILIO_AUTH_TOKEN;
   const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 
-  if (twilioSid && twilioToken && twilioPhone) {
+  if (explicitProvider === 'twilio' || (twilioSid && twilioToken && twilioPhone)) {
     cachedProvider = new TwilioSmsProvider();
     return cachedProvider;
   }
@@ -35,3 +45,9 @@ export function getDevSmsProvider(): DevelopmentSmsProvider {
 export function setSmsProviderForTesting(provider: ISmsProvider | null): void {
   cachedProvider = provider;
 }
+
+export function resetSmsProviderForTesting(): void {
+  cachedProvider = null;
+  devProviderInstance = null;
+}
+

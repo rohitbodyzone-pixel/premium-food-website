@@ -9,12 +9,16 @@ export class DevelopmentEmailProvider implements IEmailProvider {
     name: string;
     verificationLink: string;
   }): Promise<boolean> {
-    console.log('\n======================================================');
-    console.log('📧 [DEV EMAIL MODE] Email Verification Dispatched');
-    console.log(`To: ${params.name} <${params.to}>`);
-    console.log(`Subject: Verify your email address for PropertyTalk`);
-    console.log(`🔗 Action Link: ${params.verificationLink}`);
-    console.log('======================================================\n');
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`📧 [PROD EMAIL FALLBACK] Email verification link sent to ${params.to} (plaintext link suppressed for production security)`);
+    } else {
+      console.log('\n======================================================');
+      console.log('📧 [DEV EMAIL MODE] Email Verification Dispatched');
+      console.log(`To: ${params.name} <${params.to}>`);
+      console.log(`Subject: Verify your email address for PropertyTalk`);
+      console.log(`🔗 Action Link: ${params.verificationLink}`);
+      console.log('======================================================\n');
+    }
     return true;
   }
 
@@ -24,13 +28,17 @@ export class DevelopmentEmailProvider implements IEmailProvider {
     resetLink: string;
     portalName: string;
   }): Promise<boolean> {
-    console.log('\n======================================================');
-    console.log(`🔑 [DEV EMAIL MODE] Password Reset Dispatched for ${params.portalName}`);
-    console.log(`To: ${params.name} <${params.to}>`);
-    console.log(`Subject: Reset your PropertyTalk password`);
-    console.log(`🔗 Secure Reset Link: ${params.resetLink}`);
-    console.log('⏳ Link expires in 15 minutes. Single-use only.');
-    console.log('======================================================\n');
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`🔑 [PROD EMAIL FALLBACK] Password reset link sent to ${params.to} for ${params.portalName} (plaintext link suppressed for production security)`);
+    } else {
+      console.log('\n======================================================');
+      console.log(`🔑 [DEV EMAIL MODE] Password Reset Dispatched for ${params.portalName}`);
+      console.log(`To: ${params.name} <${params.to}>`);
+      console.log(`Subject: Reset your PropertyTalk password`);
+      console.log(`🔗 Secure Reset Link: ${params.resetLink}`);
+      console.log('⏳ Link expires in 15 minutes. Single-use only.');
+      console.log('======================================================\n');
+    }
     return true;
   }
 
@@ -40,13 +48,17 @@ export class DevelopmentEmailProvider implements IEmailProvider {
     otp: string;
     expiresMinutes: number;
   }): Promise<boolean> {
-    console.log('\n======================================================');
-    console.log('🔢 [DEV EMAIL MODE] Login / Action OTP Dispatched');
-    console.log(`To: ${params.name} <${params.to}>`);
-    console.log(`Subject: Your PropertyTalk Verification Code`);
-    console.log(`🔑 6-Digit OTP: ${params.otp}`);
-    console.log(`⏳ Code expires in ${params.expiresMinutes} minutes.`);
-    console.log('======================================================\n');
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`🔢 [PROD EMAIL FALLBACK] Login OTP sent to ${params.to} (plaintext OTP suppressed for production security)`);
+    } else {
+      console.log('\n======================================================');
+      console.log('🔢 [DEV EMAIL MODE] Login / Action OTP Dispatched');
+      console.log(`To: ${params.name} <${params.to}>`);
+      console.log(`Subject: Your PropertyTalk Verification Code`);
+      console.log(`🔑 6-Digit OTP: ${params.otp}`);
+      console.log(`⏳ Code expires in ${params.expiresMinutes} minutes.`);
+      console.log('======================================================\n');
+    }
     return true;
   }
 

@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   ChevronLeft,
 } from 'lucide-react';
+import { VerifiedBadge } from '../components/common/VerifiedBadge';
 
 export const ExpertProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -137,10 +138,13 @@ export const ExpertProfilePage: React.FC = () => {
                   <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                     {expert.name}
                   </h1>
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Verified</span>
-                  </span>
+                  <VerifiedBadge
+                    categorySlug={expert.category?.slug}
+                    categoryName={expert.category?.name}
+                    licenseNumber={expert.licenseNumber}
+                    size="md"
+                    showFullLabel
+                  />
                 </div>
 
                 <p className="text-xs sm:text-sm text-emerald-300 font-semibold mt-1">

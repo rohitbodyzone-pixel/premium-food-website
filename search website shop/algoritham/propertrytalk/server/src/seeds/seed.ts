@@ -787,10 +787,327 @@ async function main() {
     });
   }
 
+  // 9. Seed System Feature Flags & Rules
+  const featureConfigs = [
+    { key: 'australia_enabled', value: 'false', description: 'Australia portal activation toggle (disabled for initial NZ launch)' },
+    { key: 'remote_live_viewing_enabled', value: 'true', description: 'Remote Live Property Viewing module toggle' },
+    { key: 'agent_mini_websites_enabled', value: 'true', description: 'Public Agent Mini Websites module toggle' },
+    { key: 'ai_seo_articles_enabled', value: 'true', description: 'AI SEO article drafts and publication workflow toggle' },
+    { key: 'group_viewing_min_price_minor', value: '1000', description: 'Minimum allowed ticket price for group live viewing (NZD cents)' },
+    { key: 'group_viewing_max_price_minor', value: '5000', description: 'Maximum allowed ticket price for group live viewing (NZD cents)' },
+    { key: 'group_viewing_default_price_minor', value: '2000', description: 'Default ticket price for group live viewing (NZD cents)' },
+    { key: 'group_viewing_min_attendees', value: '5', description: 'Minimum paid attendees required for group live viewing' },
+    { key: 'group_viewing_default_capacity', value: '10', description: 'Default maximum audience capacity for live viewing' },
+    { key: 'private_viewing_price_minor', value: '6000', description: 'Standard ticket price for private live viewing (NZD cents)' },
+    { key: 'streaming_cost_per_session_minor', value: '150', description: 'Technology streaming cost deducted from agent payout (NZD cents)' },
+    { key: 'recording_default_retention_days', value: '7', description: 'Default recording retention period in days (7 or 30)' },
+  ];
+
+  for (const cfg of featureConfigs) {
+    await prisma.systemConfig.upsert({
+      where: { key: cfg.key },
+      update: { value: cfg.value, description: cfg.description },
+      create: cfg,
+    });
+  }
+
+  // 10. Seed Agent Mini Website & Articles for Sarah Jenkins
+  const sarahUser = await prisma.user.findUnique({
+    where: { email: 'sarah.jenkins@propertytalk.co.nz' },
+    include: { expertProfile: true },
+  });
+
+  if (sarahUser?.expertProfile) {
+    const miniWebsite = await prisma.agentMiniWebsite.upsert({
+      where: { expertProfileId: sarahUser.expertProfile.id },
+      update: {
+        slug: 'sarah-jenkins',
+        customHeadline: 'Ponsonby, Grey Lynn & Greater Auckland Residential Authority',
+        customAbout: 'Sarah Jenkins is an award-winning Auckland residential specialist with over 12 years of premier sales experience. Recognized for exceptional auction strategy, integrity, and transparent client advocacy.',
+        coverImageUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&auto=format&fit=crop&q=80',
+        agencyName: 'Jenkins & Co Realty (Licensed REA 2008)',
+        agencyLogoUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&auto=format&fit=crop&q=80',
+        serviceAreas: JSON.stringify(['Ponsonby', 'Grey Lynn', 'Herne Bay', 'Auckland Central', 'Mount Eden']),
+        socialLinks: JSON.stringify({
+          linkedin: 'https://linkedin.com/in/sarahjenkins-realty',
+          facebook: 'https://facebook.com/sarahjenkinsproperties',
+          instagram: 'https://instagram.com/sarahjenkinsrealty',
+          website: 'https://propertytalk.co.nz/agent/sarah-jenkins'
+        }),
+        contactPhone: '+64 21 555 0199',
+        contactEmail: 'sarah.jenkins@propertytalk.co.nz',
+        isPublished: true,
+        isModerated: true,
+        metaTitle: 'Sarah Jenkins | Licensed Real Estate Specialist Auckland | PropertyTalk',
+        metaDescription: 'Connect directly with Sarah Jenkins for trusted property valuations, remote live viewings, and premier Auckland residential listings.',
+      },
+      create: {
+        expertProfileId: sarahUser.expertProfile.id,
+        slug: 'sarah-jenkins',
+        customHeadline: 'Ponsonby, Grey Lynn & Greater Auckland Residential Authority',
+        customAbout: 'Sarah Jenkins is an award-winning Auckland residential specialist with over 12 years of premier sales experience. Recognized for exceptional auction strategy, integrity, and transparent client advocacy.',
+        coverImageUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&auto=format&fit=crop&q=80',
+        agencyName: 'Jenkins & Co Realty (Licensed REA 2008)',
+        agencyLogoUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&auto=format&fit=crop&q=80',
+        serviceAreas: JSON.stringify(['Ponsonby', 'Grey Lynn', 'Herne Bay', 'Auckland Central', 'Mount Eden']),
+        socialLinks: JSON.stringify({
+          linkedin: 'https://linkedin.com/in/sarahjenkins-realty',
+          facebook: 'https://facebook.com/sarahjenkinsproperties',
+          instagram: 'https://instagram.com/sarahjenkinsrealty',
+          website: 'https://propertytalk.co.nz/agent/sarah-jenkins'
+        }),
+        contactPhone: '+64 21 555 0199',
+        contactEmail: 'sarah.jenkins@propertytalk.co.nz',
+        isPublished: true,
+        isModerated: true,
+        metaTitle: 'Sarah Jenkins | Licensed Real Estate Specialist Auckland | PropertyTalk',
+        metaDescription: 'Connect directly with Sarah Jenkins for trusted property valuations, remote live viewings, and premier Auckland residential listings.',
+      },
+    });
+
+    // Seed SEO Articles
+    await prisma.agentArticle.upsert({
+      where: { slug: '2026-auckland-central-suburb-buyer-guide' },
+      update: {},
+      create: {
+        agentProfileId: sarahUser.expertProfile.id,
+        miniWebsiteId: miniWebsite.id,
+        title: '2026 Auckland Central Suburb Guide: Where Buyers Find Long-Term Value',
+        slug: '2026-auckland-central-suburb-buyer-guide',
+        topic: 'Auckland Market Trends',
+        targetCity: 'Auckland',
+        targetSuburb: 'Ponsonby',
+        summary: 'A deep-dive analysis of Ponsonby and Grey Lynn median sale prices, school zones, and public transport developments shaping 2026 buyer demand.',
+        content: `## Navigating the Auckland Residential Market in 2026\n\nWith stabilizing interest rates and strong migration into Auckland Central, premium suburbs such as Ponsonby, Grey Lynn, and Herne Bay continue to lead capital stability across the region.\n\n### Why Verified Agency Matters\n\nUnder the Real Estate Agents Act 2008, prospective buyers are entitled to full disclosure on weather-tightness, title covenants, and recent council compliance certificates.\n\n### The Rise of Remote Live Property Viewings\n\nRemote Live Viewings now allow buyers across New Zealand and abroad to walk through properties in real time with a licensed REA specialist, ask spontaneous questions, and inspect details without the burden of cross-country travel.`,
+        metaTitle: '2026 Auckland Central Suburb Guide | Sarah Jenkins Real Estate',
+        metaDescription: 'Expert guide to buying in Ponsonby, Grey Lynn, and Auckland Central. By Sarah Jenkins, Licensed REA Specialist.',
+        status: 'PUBLISHED',
+        source: 'AI_SUGGESTED',
+        isModerated: true,
+        publishedAt: new Date(),
+        lastReviewedAt: new Date(),
+      },
+    });
+
+    await prisma.agentArticle.upsert({
+      where: { slug: 'how-remote-live-viewings-protect-nz-buyers' },
+      update: {},
+      create: {
+        agentProfileId: sarahUser.expertProfile.id,
+        miniWebsiteId: miniWebsite.id,
+        title: 'How Remote Live Viewings Protect First-Home Buyers Across New Zealand',
+        slug: 'how-remote-live-viewings-protect-nz-buyers',
+        topic: 'Remote Live Viewing',
+        targetCity: 'Auckland',
+        targetSuburb: 'Auckland Central',
+        summary: 'How verified 10-minute live remote walkthroughs save time, eliminate travel expenses, and provide unvarnished transparency before physical inspection.',
+        content: `## Transparency Before Commitment\n\nTraditional open homes can be time-consuming and challenging for buyers relocating between cities or balancing demanding work schedules.\n\nPropertyTalk Remote Live Viewings provide a structured 10-minute live broadcast where verified agents walk through every room, check water pressure, inspect under-stair storage, and answer questions live via viewer chat.\n\n### Guaranteed Consumer Security\n\nIf minimum participant quotas are not met, full refunds are issued automatically. With fixed 10-minute duration and independent REA verification, remote buyers can proceed with confidence.`,
+        metaTitle: 'How Remote Live Viewings Protect NZ Buyers | Sarah Jenkins',
+        metaDescription: 'Understand the safeguards, live interaction, and cost savings of PropertyTalk Remote Live Viewings.',
+        status: 'PUBLISHED',
+        source: 'AI_SUGGESTED',
+        isModerated: true,
+        publishedAt: new Date(),
+        lastReviewedAt: new Date(),
+      },
+    });
+
+    // 11. Seed Demo Properties
+    const p1 = await prisma.property.upsert({
+      where: { slug: '14-st-marys-bay-road-auckland' },
+      update: {},
+      create: {
+        title: 'Architectural Heritage Villa with Harbour Views',
+        slug: '14-st-marys-bay-road-auckland',
+        description: 'Impeccably restored 4-bedroom classic villa situated in prestigious St Marys Bay. Featuring open-plan bespoke kitchen, seamless indoor-outdoor flow to a landscaped pool, and sweeping Waitemata Harbour views.',
+        propertyType: 'HOUSE',
+        listingType: 'FOR_SALE',
+        priceMinorUnits: 285000000,
+        priceDisplay: '$2,850,000',
+        bedrooms: 4,
+        bathrooms: 3,
+        parkingSpaces: 2,
+        floorAreaM2: 245,
+        landAreaM2: 520,
+        streetAddress: '14 St Marys Bay Road',
+        suburb: 'St Marys Bay',
+        city: 'Auckland',
+        countryCode: 'NZ',
+        postalCode: '1011',
+        latitude: -36.845,
+        longitude: 174.745,
+        images: JSON.stringify([
+          'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=1200&auto=format&fit=crop&q=80',
+        ]),
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        documents: JSON.stringify([
+          { title: 'Record of Title (Identifier NA48B/112)', fileUrl: 'https://placehold.co/600x400/png?text=Title+Document', type: 'PDF' },
+          { title: 'Land Information Memorandum (LIM Report)', fileUrl: 'https://placehold.co/600x400/png?text=LIM+Report', type: 'PDF' },
+        ]),
+        isPrivateListing: false,
+        agentProfileId: sarahUser.expertProfile.id,
+        status: 'ACTIVE',
+        isFeatured: true,
+        isModerated: true,
+        remoteViewingAvailable: true,
+        viewsCount: 142,
+      },
+    });
+
+    const p2 = await prisma.property.upsert({
+      where: { slug: '42-oriental-parade-wellington' },
+      update: {},
+      create: {
+        title: 'Waterfront Penthouse with Panoramic Harbour Vista',
+        slug: '42-oriental-parade-wellington',
+        description: 'Spectacular 3-bedroom luxury penthouse perched above Oriental Bay. Wrap-around balcony, European appliances, double secure garage, and direct elevator access.',
+        propertyType: 'APARTMENT',
+        listingType: 'FOR_SALE',
+        priceMinorUnits: 195000000,
+        priceDisplay: '$1,950,000',
+        bedrooms: 3,
+        bathrooms: 2,
+        parkingSpaces: 2,
+        floorAreaM2: 175,
+        landAreaM2: null,
+        streetAddress: '42 Oriental Parade',
+        suburb: 'Oriental Bay',
+        city: 'Wellington',
+        countryCode: 'NZ',
+        postalCode: '6011',
+        latitude: -41.291,
+        longitude: 174.793,
+        images: JSON.stringify([
+          'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&auto=format&fit=crop&q=80',
+        ]),
+        documents: JSON.stringify([
+          { title: 'Body Corporate Rules & Pre-Contract Disclosure', fileUrl: 'https://placehold.co/600x400/png?text=Pre-Contract+Disclosure', type: 'PDF' }
+        ]),
+        isPrivateListing: false,
+        agentProfileId: sarahUser.expertProfile.id,
+        status: 'ACTIVE',
+        isFeatured: true,
+        isModerated: true,
+        remoteViewingAvailable: true,
+        viewsCount: 98,
+      },
+    });
+
+    const p3 = await prisma.property.upsert({
+      where: { slug: '8-rossall-street-merivale-christchurch' },
+      update: {},
+      create: {
+        title: 'Contemporary Merivale Executive Townhouse',
+        slug: '8-rossall-street-merivale-christchurch',
+        description: 'Newly constructed 3-bedroom, 2-bathroom executive townhouse situated in the heart of Merivale. Zoned for Christchurch Boys and Girls High Schools.',
+        propertyType: 'TOWNHOUSE',
+        listingType: 'FOR_RENT',
+        priceMinorUnits: 75000,
+        priceDisplay: '$750/week',
+        bedrooms: 3,
+        bathrooms: 2,
+        parkingSpaces: 1,
+        floorAreaM2: 150,
+        landAreaM2: 210,
+        streetAddress: '8 Rossall Street',
+        suburb: 'Merivale',
+        city: 'Christchurch',
+        countryCode: 'NZ',
+        postalCode: '8014',
+        latitude: -43.518,
+        longitude: 172.618,
+        images: JSON.stringify([
+          'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&auto=format&fit=crop&q=80',
+          'https://images.unsplash.com/photo-1600573472592-401b489a3cdc?w=1200&auto=format&fit=crop&q=80',
+        ]),
+        documents: JSON.stringify([
+          { title: 'Healthy Homes Compliance Certificate', fileUrl: 'https://placehold.co/600x400/png?text=Healthy+Homes+Cert', type: 'PDF' }
+        ]),
+        isPrivateListing: false,
+        agentProfileId: sarahUser.expertProfile.id,
+        status: 'ACTIVE',
+        isFeatured: false,
+        isModerated: true,
+        remoteViewingAvailable: true,
+        viewsCount: 64,
+      },
+    });
+
+    // 12. Seed Demo Remote Live Viewings
+    const scheduledDate = new Date();
+    scheduledDate.setDate(scheduledDate.getDate() + 2);
+    scheduledDate.setHours(14, 0, 0, 0);
+
+    await prisma.liveViewingSession.upsert({
+      where: { streamRoomId: 'room_villa_group_live' },
+      update: {},
+      create: {
+        propertyId: p1.id,
+        hostProfileId: sarahUser.expertProfile.id,
+        viewingType: 'GROUP',
+        title: 'Group Live Viewing: 14 St Marys Bay Road Villa Walkthrough',
+        scheduledAt: scheduledDate,
+        durationMinutes: 10,
+        ticketPriceMinorUnits: 2000, // NZ$20
+        currency: 'NZD',
+        minAttendees: 5,
+        maxCapacity: 10,
+        status: 'SCHEDULED',
+        streamRoomId: 'room_villa_group_live',
+        streamingCostMinorUnits: 150, // Test-only calculated cost (10 mins * $0.15/min)
+        actualUsageMinutes: 10.0,
+        streamingCostType: 'ESTIMATED_TEST',
+        isProductionProvider: false,
+        providerCostDetails: JSON.stringify({ isProductionReady: false, providerStatus: 'MOCK_TEST_ARCHITECTURE', ratePerMinuteMinorUnits: 15, actualMinutesUsed: 10.0, calculatedCostMinorUnits: 150, disclaimer: 'ESTIMATED TEST-ONLY COST: No real WebRTC provider connected.' }),
+        recordingAllowed: false,
+        sellerConsentGiven: true,
+        recordingRetentionDays: 7,
+      },
+    });
+
+    const privateScheduledDate = new Date();
+    privateScheduledDate.setDate(privateScheduledDate.getDate() + 3);
+    privateScheduledDate.setHours(11, 0, 0, 0);
+
+    await prisma.liveViewingSession.upsert({
+      where: { streamRoomId: 'room_penthouse_private_live' },
+      update: {},
+      create: {
+        propertyId: p2.id,
+        hostProfileId: sarahUser.expertProfile.id,
+        viewingType: 'PRIVATE',
+        title: 'Private Remote Viewing: Oriental Parade Penthouse',
+        scheduledAt: privateScheduledDate,
+        durationMinutes: 10,
+        ticketPriceMinorUnits: 6000, // NZ$60
+        currency: 'NZD',
+        minAttendees: 1,
+        maxCapacity: 1,
+        status: 'SCHEDULED',
+        streamRoomId: 'room_penthouse_private_live',
+        streamingCostMinorUnits: 150,
+        actualUsageMinutes: 10.0,
+        streamingCostType: 'ESTIMATED_TEST',
+        isProductionProvider: false,
+        providerCostDetails: JSON.stringify({ isProductionReady: false, providerStatus: 'MOCK_TEST_ARCHITECTURE', ratePerMinuteMinorUnits: 15, actualMinutesUsed: 10.0, calculatedCostMinorUnits: 150, disclaimer: 'ESTIMATED TEST-ONLY COST: No real WebRTC provider connected.' }),
+        recordingAllowed: false,
+        sellerConsentGiven: true,
+        recordingRetentionDays: 7,
+      },
+    });
+  }
+
   console.log('✅ PropertyTalk database seeded successfully!');
-  console.log('   - 2 Countries: NZ, AU');
-  console.log('   - 10 Categories seeded and verified');
+  console.log('   - 2 Countries: NZ, AU (AU disabled by default for launch)');
+  console.log('   - 10 Categories seeded and verified (4 Free Property Help, 6 Paid Expert Advice)');
   console.log('   - 20 Verified Demo Professionals with reviews & availability');
+  console.log('   - Demo Properties & Remote Live Viewings seeded');
+  console.log('   - Sarah Jenkins REA Mini Website & AI SEO Articles active');
   console.log('   - 2 Pending Experts in Super Admin verification queue');
   console.log('   - 1 Super Admin (admin@propertytalk.com / password123)');
   console.log('   - 1 Consumer (james.wilson@gmail.com / password123)');

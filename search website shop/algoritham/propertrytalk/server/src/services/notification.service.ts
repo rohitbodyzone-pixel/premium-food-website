@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import webpush from 'web-push';
 import { prisma } from '../db/prisma';
 import { getEmailProvider } from './email/email-provider.factory';
 
@@ -15,6 +16,40 @@ export interface CreateNotificationParams {
 
 export class NotificationService {
   private io?: Server;
+  private vapidConfigured: boolean = false;
+
+  constructor() {
+    this.initVapid();
+  }
+
+  initVapid() {
+    const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY || process.env.WEB_PUSH_PRIVATE_KEY;
+    const subject = process.env.VAPID_SUBJECT || 'mailto:admin@propertytalk.co.nz';
+
+    if (publicKey && privateKey) {
+      try {
+        webpush.setVapidDetails(subject, publicKey, privateKey);
+        this.vapidConfigured = true;
+      } catch (err: any) {
+        console.warn('[NotificationService] Failed to set VAPID details:', err.message);
+        this.vapidConfigured = false;
+      }
+    } else {
+      this.vapidConfigured = false;
+    }
+  }
+
+  isVapidConfigured(): boolean {
+    if (!this.vapidConfigured) {
+      this.initVapid();
+    }
+    return this.vapidConfigured;
+  }
+
+  getVapidPublicKey(): string | null {
+    return process.env.VAPID_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY || null;
+  }
 
   setSocketServer(io: Server) {
     this.io = io;
@@ -24,28 +59,22 @@ export class NotificationService {
    * Retrieves or creates default notification preferences for a user.
    */
   async getOrCreatePreferences(userId: string) {
-    let prefs = await prisma.notificationPreference.findUnique({
+    return await prisma.notificationPreference.upsert({
       where: { userId },
+      update: {},
+      create: {
+        userId,
+        inAppEnabled: true,
+        emailEnabled: true,
+        pushEnabled: false,
+        chatAlerts: true,
+        callAlerts: true,
+        bookingUpdates: true,
+        appointmentReminders: true,
+        paymentReceipts: true,
+        verificationUpdates: true,
+      },
     });
-
-    if (!prefs) {
-      prefs = await prisma.notificationPreference.create({
-        data: {
-          userId,
-          inAppEnabled: true,
-          emailEnabled: true,
-          pushEnabled: false,
-          chatAlerts: true,
-          callAlerts: true,
-          bookingUpdates: true,
-          appointmentReminders: true,
-          paymentReceipts: true,
-          verificationUpdates: true,
-        },
-      });
-    }
-
-    return prefs;
   }
 
   /**
@@ -147,23 +176,81 @@ export class NotificationService {
       }
     }
 
-    // 3. Optional Push Notification Dispatch (Foundation)
+    // 3. Web Push Notification Dispatch (Real VAPID)
     if (prefs.pushEnabled) {
-      // Check stored subscriptions
       const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } });
-      const hasVapid = Boolean(process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY);
+      const isVapidReady = this.isVapidConfigured();
 
-      for (const sub of subscriptions) {
-        await prisma.notificationLog.create({
+      if (subscriptions.length > 0 && isVapidReady) {
+        const pushPayload = JSON.stringify({
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          body: notification.body,
+          priority: notification.priority,
           data: {
-            userId,
-            type,
-            channel: 'PUSH',
-            status: hasVapid ? 'DELIVERED' : 'SENT_CONSOLE',
-            provider: hasVapid ? 'WebPushService' : 'DevelopmentWebPush (Mock)',
-            referenceId: sub.id,
+            url: dataJson?.url || (type.includes('EXPERT') ? '/expert' : '/notifications'),
+            ...(dataJson || {}),
           },
-        }).catch(() => {});
+        });
+
+        for (const sub of subscriptions) {
+          try {
+            await webpush.sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth,
+                },
+              },
+              pushPayload
+            );
+
+            await prisma.notificationLog.create({
+              data: {
+                userId,
+                type,
+                channel: 'PUSH',
+                status: 'DELIVERED',
+                provider: 'WebPushService',
+                referenceId: sub.id,
+              },
+            }).catch(() => {});
+          } catch (pushErr: any) {
+            console.warn(`[WebPush] Push dispatch note for sub ${sub.id}:`, pushErr?.statusCode || pushErr?.message);
+
+            // If subscription is expired or unregistered (HTTP 404 / 410 Gone), automatically prune from DB
+            if (pushErr?.statusCode === 404 || pushErr?.statusCode === 410) {
+              console.log(`[WebPush] Pruning expired/invalid subscription ${sub.id} (HTTP ${pushErr.statusCode})`);
+              await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+            }
+
+            await prisma.notificationLog.create({
+              data: {
+                userId,
+                type,
+                channel: 'PUSH',
+                status: 'FAILED',
+                provider: 'WebPushService',
+                referenceId: sub.id,
+              },
+            }).catch(() => {});
+          }
+        }
+      } else if (subscriptions.length > 0) {
+        for (const sub of subscriptions) {
+          await prisma.notificationLog.create({
+            data: {
+              userId,
+              type,
+              channel: 'PUSH',
+              status: 'SENT_CONSOLE',
+              provider: 'DevelopmentWebPush (Mock)',
+              referenceId: sub.id,
+            },
+          }).catch(() => {});
+        }
       }
     }
 

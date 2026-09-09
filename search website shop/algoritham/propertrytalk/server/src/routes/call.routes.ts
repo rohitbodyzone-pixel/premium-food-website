@@ -3,6 +3,7 @@ import { prisma } from '../db/prisma';
 import { requireAuth } from '../middleware/auth.middleware';
 import { callProvider } from '../services/call-provider/webrtc-call-provider';
 import { callTimerService } from '../services/call-timer.service';
+import { chatTimerService } from '../services/chat-timer.service';
 import { presenceService } from '../services/presence.service';
 import { notificationService } from '../services/notification.service';
 import { callRequestRateLimiter } from '../middleware/rate-limiter.middleware';
@@ -38,11 +39,35 @@ router.post('/request', requireAuth, callRequestRateLimiter, async (req: Request
     }
 
     // Presence & Availability Validation (Busy check)
-    const eligibility = await presenceService.canExpertAcceptCall(chat.expertId);
+    // Pass chatId and consumerId to permit same-consultation upgrade!
+    const eligibility = await presenceService.canExpertAcceptCall(chat.expertId, {
+      chatId: chat.id,
+      consumerId,
+    });
     if (!eligibility.eligible) {
       res.status(409).json({ error: eligibility.reason || 'Expert is currently busy or unavailable for calls.' });
       return;
     }
+
+    // Free timer inheritance: Never grant a second free minute!
+    const chatTimer = chatTimerService.getTimerState(chat.id);
+    let inheritedFreeSecondsRemaining = 60;
+    const isAlreadyExtendedPaid = chat.extendedPaid || (chatTimer?.extendedPaid ?? false);
+    const isAlreadyFreeExpired = chat.isFreeExpired || (chatTimer?.isFreeExpired ?? false);
+
+    if (isAlreadyExtendedPaid || isAlreadyFreeExpired) {
+      inheritedFreeSecondsRemaining = 0;
+    } else if (chatTimer) {
+      inheritedFreeSecondsRemaining = Math.max(0, chatTimer.freeSecondsRemaining);
+    } else if (chat.freeStartedAt) {
+      const elapsed = Math.floor((Date.now() - new Date(chat.freeStartedAt).getTime()) / 1000);
+      inheritedFreeSecondsRemaining = Math.max(0, 60 - elapsed);
+    } else if (chat.freeSecondsRemaining !== undefined && chat.freeSecondsRemaining !== null) {
+      inheritedFreeSecondsRemaining = Math.max(0, chat.freeSecondsRemaining);
+    }
+
+    // Stop active chat timer while call is being initiated
+    chatTimerService.stopChatTimer(chat.id);
 
     // Create Call Session
     const callSession = await prisma.callSession.create({
@@ -53,7 +78,7 @@ router.post('/request', requireAuth, callRequestRateLimiter, async (req: Request
         callType: callType === 'VIDEO' ? 'VIDEO' : 'AUDIO',
         status: 'REQUESTED',
         freeMinutesAllowed: 1,
-        freeSecondsRemaining: 60,
+        freeSecondsRemaining: inheritedFreeSecondsRemaining,
       },
       include: {
         expert: {
@@ -183,8 +208,11 @@ router.post('/:id/respond', requireAuth, async (req: Request, res: Response) => 
       return;
     }
 
-    // Action is ACCEPT: Atomically lock expert as busy
-    const locked = presenceService.lockExpertBusy(callSession.expertId, id);
+    // Action is ACCEPT: Atomically lock expert as busy (allowing upgrade from same consultation)
+    const locked = presenceService.lockExpertBusy(callSession.expertId, id, {
+      chatId: callSession.chatId,
+      consumerId: callSession.consumerId,
+    });
     if (!locked) {
       res.status(409).json({ error: 'You are currently registered in another active consultation.' });
       return;
@@ -251,8 +279,10 @@ router.post('/:id/connect', requireAuth, async (req: Request, res: Response) => 
       return;
     }
 
-    // Start server-authoritative timer
-    const timer = await callTimerService.startCallTimer(id);
+    // Start server-authoritative timer with inherited remaining free seconds and paid state
+    const chat = call.chatId ? await prisma.consultationChat.findUnique({ where: { id: call.chatId } }) : null;
+    const isExtendedPaid = Boolean(chat?.extendedPaid);
+    const timer = await callTimerService.startCallTimer(id, call.freeSecondsRemaining, isExtendedPaid);
 
     // Update status to IN_PROGRESS
     await prisma.callSession.update({
@@ -366,8 +396,31 @@ router.post('/:id/end', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Stop server timer
+    // Stop server timer and capture remaining state
+    const activeTimer = callTimerService.getTimerState(id);
+    const finalRemainingSeconds = activeTimer ? activeTimer.freeSecondsRemaining : callBefore.freeSecondsRemaining;
+    const finalExtendedPaid = activeTimer?.extendedPaid ?? false;
+    const finalFreeExpired = activeTimer?.isFreeExpired ?? (finalRemainingSeconds <= 0);
+
     await callTimerService.stopCallTimer(id);
+
+    // Sync remaining seconds and paid state back to chat if consultation chat exists
+    if (callBefore.chatId) {
+      await prisma.consultationChat.update({
+        where: { id: callBefore.chatId },
+        data: {
+          freeSecondsRemaining: finalRemainingSeconds,
+          isFreeExpired: finalFreeExpired,
+          extendedPaid: finalExtendedPaid,
+        },
+      });
+      const activeChatTimer = chatTimerService.getTimerState(callBefore.chatId);
+      if (activeChatTimer) {
+        activeChatTimer.freeSecondsRemaining = finalRemainingSeconds;
+        activeChatTimer.isFreeExpired = finalFreeExpired;
+        activeChatTimer.extendedPaid = finalExtendedPaid;
+      }
+    }
 
     // Release expert presence busy lock
     await presenceService.releaseExpertBusy(callBefore.expertId, id);

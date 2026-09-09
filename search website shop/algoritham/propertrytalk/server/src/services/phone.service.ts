@@ -176,7 +176,7 @@ export class PhoneService {
 
     // Dispatch SMS via configured SMS Provider
     const smsProvider = getSmsProvider();
-    await smsProvider.sendOtp({
+    const sent = await smsProvider.sendOtp({
       to: e164,
       otp: rawOtp,
       expiresMinutes: PhoneService.DEFAULT_EXPIRY_MINUTES,
@@ -190,11 +190,19 @@ export class PhoneService {
         userId: params.userId || null,
         type: `PHONE_OTP_${params.reason}`,
         channel: 'SMS',
-        status: smsProvider.isDevelopment ? 'SENT_CONSOLE' : 'DELIVERED',
+        status: smsProvider.isDevelopment ? 'SENT_CONSOLE' : (sent ? 'DELIVERED' : 'FAILED'),
         provider: smsProvider.name,
         referenceId: maskPhoneNumber(e164),
       },
     }).catch(() => {});
+
+    if (!sent && !smsProvider.isDevelopment) {
+      const lastError = (smsProvider as any).getLastError?.();
+      const safeMsg =
+        lastError?.safeMessage ||
+        'Failed to dispatch SMS verification code. Please check your number or try again later.';
+      throw new Error(safeMsg);
+    }
 
     return {
       success: true,
@@ -223,7 +231,8 @@ export class PhoneService {
   }> {
     const { otp, reason } = params;
 
-    if (!otp || otp.trim().length !== PhoneService.OTP_LENGTH) {
+    const cleanOtp = (otp || '').replace(/\D/g, '');
+    if (!cleanOtp || cleanOtp.length !== PhoneService.OTP_LENGTH) {
       return { success: false, message: 'Verification code must be 6 digits.', normalizedPhone: '' };
     }
 
@@ -252,7 +261,7 @@ export class PhoneService {
       };
     }
 
-    // Expiry check
+    // Expiry check (strictly 10 minutes)
     if (now > record.expiresAt) {
       await prisma.phoneVerification.delete({ where: { id: record.id } }).catch(() => {});
       return {
@@ -262,7 +271,7 @@ export class PhoneService {
       };
     }
 
-    // Attempts check
+    // Attempts check (strictly max 3 attempts)
     if (record.attempts >= PhoneService.MAX_ATTEMPTS) {
       await prisma.phoneVerification.delete({ where: { id: record.id } }).catch(() => {});
       return {
@@ -272,8 +281,33 @@ export class PhoneService {
       };
     }
 
-    const submittedHash = this.hashOtp(otp.trim());
-    if (submittedHash !== record.otpHash) {
+    // Verification check:
+    // If the active SMS provider provides its own verification (e.g. Twilio Verify v2),
+    // delegate verification to it. Otherwise, use PropertyTalk's secure SHA-256 hash comparison.
+    const smsProvider = getSmsProvider();
+    let isCodeValid = false;
+
+    if (typeof (smsProvider as any).verifyOtp === 'function') {
+      const providerCheck = await (smsProvider as any).verifyOtp(e164, cleanOtp);
+      if (providerCheck.error === 'NO_VERIFY_SERVICE') {
+        const submittedHash = this.hashOtp(cleanOtp);
+        isCodeValid = (submittedHash === record.otpHash);
+      } else if (providerCheck.error === 'EXPIRED') {
+        await prisma.phoneVerification.delete({ where: { id: record.id } }).catch(() => {});
+        return {
+          success: false,
+          message: 'Verification code has expired. Please request a new code.',
+          normalizedPhone: e164,
+        };
+      } else {
+        isCodeValid = Boolean(providerCheck.success);
+      }
+    } else {
+      const submittedHash = this.hashOtp(cleanOtp);
+      isCodeValid = (submittedHash === record.otpHash);
+    }
+
+    if (!isCodeValid) {
       const nextAttempts = record.attempts + 1;
       const remainingAttempts = PhoneService.MAX_ATTEMPTS - nextAttempts;
 

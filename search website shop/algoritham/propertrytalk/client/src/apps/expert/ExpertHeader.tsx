@@ -16,6 +16,10 @@ import {
   DollarSign,
   Clock,
   Bell,
+  Globe,
+  Video,
+  BookOpen,
+  Users,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
@@ -75,6 +79,11 @@ export const ExpertHeader: React.FC = () => {
 
   const navLinks = [
     { label: 'Dashboard', path: '/dashboard', icon: Building2 },
+    { label: 'Listings', path: '/properties', icon: Building2 },
+    { label: 'Live Viewings', path: '/live-viewings', icon: Video },
+    { label: 'Mini-Website', path: '/mini-website', icon: Globe },
+    { label: 'SEO Articles', path: '/articles', icon: BookOpen },
+    { label: 'Leads', path: '/leads', icon: Users },
     { label: 'Appointments', path: '/appointments', icon: Calendar },
     { label: 'Availability', path: '/availability', icon: Clock },
     { label: 'Chats', path: '/chats', icon: MessageSquare },

@@ -1,3 +1,4 @@
+import Stripe from 'stripe';
 import {
   IPaymentProvider,
   CreateCustomerParams,
@@ -13,20 +14,25 @@ export class StripePaymentProvider implements IPaymentProvider {
   readonly name = 'StripePaymentProvider';
   readonly isMock = false;
 
-  private stripeClient: any = null;
+  private stripeClient: Stripe | null = null;
 
-  constructor() {
-    const apiKey = process.env.STRIPE_SECRET_KEY;
+  constructor(customApiKey?: string) {
+    const apiKey = customApiKey || process.env.STRIPE_SECRET_KEY;
+    if (apiKey && (apiKey.startsWith('sk_live_') || apiKey.startsWith('rk_live_'))) {
+      throw new Error(
+        'Stripe live mode is disabled during Phase 3A. Only test credentials (sk_test_) are permitted.'
+      );
+    }
+
     if (apiKey) {
       try {
-        // Safe lazy import of Stripe package if installed
-        const StripeConstructor = require('stripe');
-        this.stripeClient = new StripeConstructor(apiKey, {
-          apiVersion: '2024-11-20.acacia',
+        this.stripeClient = new Stripe(apiKey, {
+          apiVersion: '2024-11-20.acacia' as any,
         });
-      } catch (err) {
+      } catch (err: any) {
         console.warn(
-          '[StripePaymentProvider] Stripe library not found or failed to initialize. Falling back to safe handling.'
+          '[StripePaymentProvider] Stripe library failed to initialize:',
+          err?.message
         );
       }
     }
@@ -63,7 +69,7 @@ export class StripePaymentProvider implements IPaymentProvider {
     });
     return {
       setupIntentId: setupIntent.id,
-      clientSecret: setupIntent.client_secret,
+      clientSecret: setupIntent.client_secret || '',
       customerId,
     };
   }
@@ -83,9 +89,20 @@ export class StripePaymentProvider implements IPaymentProvider {
     const stripe = this.ensureStripe();
 
     if (params.token) {
-      // Create payment method from client token/id
-      const pm = await stripe.paymentMethods.retrieve(params.token);
-      await stripe.paymentMethods.attach(pm.id, { customer: customerId });
+      let pm: Stripe.PaymentMethod;
+      if (params.token.startsWith('tok_')) {
+        pm = await stripe.paymentMethods.create({
+          type: 'card',
+          card: { token: params.token },
+        });
+        pm = await stripe.paymentMethods.attach(pm.id, { customer: customerId });
+      } else {
+        pm = await stripe.paymentMethods.retrieve(params.token);
+        if (pm.customer !== customerId) {
+          pm = await stripe.paymentMethods.attach(pm.id, { customer: customerId });
+        }
+      }
+
       return {
         paymentMethodId: pm.id,
         type: pm.type,
@@ -136,7 +153,7 @@ export class StripePaymentProvider implements IPaymentProvider {
     return {
       paymentIntentId: paymentIntent.id,
       status: paymentIntent.status,
-      clientSecret: paymentIntent.client_secret,
+      clientSecret: paymentIntent.client_secret || undefined,
     };
   }
 
@@ -188,7 +205,7 @@ export class StripePaymentProvider implements IPaymentProvider {
 
     return {
       refundId: refund.id,
-      status: refund.status,
+      status: refund.status || 'unknown',
       amountRefundedMinorUnits: refund.amount,
     };
   }

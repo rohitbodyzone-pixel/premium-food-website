@@ -25,12 +25,15 @@ import {
   KeyRound,
   Sparkles,
   X,
+  Heart,
+  Video,
+  Globe,
 } from 'lucide-react';
 import { CountryCodePicker, SupportedCountryPhone, SUPPORTED_COUNTRY_PHONES } from '../components/CountryCodePicker';
 
 export const ProfilePage: React.FC = () => {
   const { user, logout, requestPhoneChange, verifyPhoneChange } = useAuth();
-  const { selectedCountry } = useCountry();
+  const { selectedCountry, setIsCountryModalOpen } = useCountry();
   const navigate = useNavigate();
 
   // Phone Modal States
@@ -260,34 +263,47 @@ export const ProfilePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Section: EXPLORE */}
+      {/* 4. Section: EXPLORE & ACTIVITY */}
       <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-1">
         <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 px-3 pb-1">
-          Explore
+          Activity & Preferences
         </h3>
 
         <Link
-          to="/experts"
+          to="/saved-properties"
           className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition group"
         >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-              <User className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center">
+              <Heart className="w-4 h-4 fill-current" />
             </div>
-            <span className="text-xs font-semibold text-slate-800">Find Property Experts</span>
+            <span className="text-xs font-semibold text-slate-800">Saved Properties</span>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
         </Link>
 
         <Link
-          to="/chats"
+          to="/saved-experts"
           className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition group"
         >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Bookmark className="w-4 h-4" />
             </div>
-            <span className="text-xs font-semibold text-slate-800">My Chats</span>
+            <span className="text-xs font-semibold text-slate-800">Saved Professionals</span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
+        </Link>
+
+        <Link
+          to="/live-viewings"
+          className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Video className="w-4 h-4" />
+            </div>
+            <span className="text-xs font-semibold text-slate-800">Remote Live Viewings</span>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
         </Link>
@@ -300,10 +316,33 @@ export const ProfilePage: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
               <Calendar className="w-4 h-4" />
             </div>
-            <span className="text-xs font-semibold text-slate-800">My Appointments</span>
+            <span className="text-xs font-semibold text-slate-800">My Appointments & Viewings</span>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
         </Link>
+
+        {/* First-use / Consultation Destination Country Toggle */}
+        <button
+          type="button"
+          onClick={() => setIsCountryModalOpen(true)}
+          className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition group text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-slate-800 block">Consultation Country</span>
+              <span className="text-[10px] text-slate-400">
+                {selectedCountry?.name || 'New Zealand'} ({selectedCountry?.currency || 'NZD'})
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-lg">{selectedCountry?.flag || '🇳🇿'}</span>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
+          </div>
+        </button>
       </div>
 
       {/* 5. Section: SUPPORT */}

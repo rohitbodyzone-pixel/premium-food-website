@@ -49,18 +49,30 @@ export const ActiveCallModal: React.FC = () => {
 
   // Attach local media stream
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+    try {
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream || null;
+      }
+    } catch (e) {
+      console.warn('Error attaching localStream:', e);
     }
   }, [localStream, isVideoOff]);
 
   // Attach remote media stream
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    try {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream || null;
+      }
+    } catch (e) {
+      console.warn('Error attaching remoteVideo:', e);
     }
-    if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
+    try {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream || null;
+      }
+    } catch (e) {
+      console.warn('Error attaching remoteAudio:', e);
     }
   }, [remoteStream]);
 
@@ -79,16 +91,44 @@ export const ActiveCallModal: React.FC = () => {
   const isVideo = activeCall.callType === 'VIDEO';
   const isConsumer = user?.role === 'CONSUMER';
 
-  // Format seconds to mm:ss
-  const formatTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+  // Format seconds to mm:ss safely
+  const formatTimer = (seconds: number | undefined | null) => {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const freeSecondsRemaining = timerState?.freeSecondsRemaining ?? 60;
-  const isFreeExpired = timerState?.isFreeExpired ?? false;
+  const isFreeExpired = (timerState?.isFreeExpired ?? false) || Boolean(freeExpiredPayload);
   const isExtendedPaid = timerState?.extendedPaid ?? false;
+
+  // Handle strict media cutoff when free time expires (zero voice or video continuation)
+  useEffect(() => {
+    if (isFreeExpired && !isExtendedPaid) {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = true;
+        remoteAudioRef.current.pause();
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.pause();
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.pause();
+      }
+    } else if (isExtendedPaid) {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.play().catch((err) => console.warn('Audio play resumed:', err));
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.play().catch((err) => console.warn('Video play resumed:', err));
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.play().catch((err) => console.warn('Local video resumed:', err));
+      }
+    }
+  }, [isFreeExpired, isExtendedPaid]);
 
   const handleBookAppointment = () => {
     endActiveCall();
@@ -152,7 +192,7 @@ export const ActiveCallModal: React.FC = () => {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold shadow-sm">
                 <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 <span>
-                  PAID CONSULTATION • {timerState?.currencySymbol || '$'}{(timerState?.ratePerMinute || freeExpiredPayload?.expertRatePerMinute || 3.0).toFixed(2)}/min • {formatTimer(timerState?.paidSecondsElapsed ?? timerState?.totalElapsedSeconds ?? 0)} • Est: {timerState?.currencySymbol || '$'}{(timerState?.estimatedCost || 0).toFixed(2)}
+                  PAID CONSULTATION • {timerState?.currencySymbol || '$'}{(Number(timerState?.ratePerMinute) || Number(freeExpiredPayload?.expertRatePerMinute) || 3.0).toFixed(2)}/min • {formatTimer(timerState?.paidSecondsElapsed ?? timerState?.totalElapsedSeconds ?? 0)} • Est: {timerState?.currencySymbol || '$'}{(Number(timerState?.estimatedCost) || 0).toFixed(2)}
                 </span>
               </div>
             )}
@@ -239,45 +279,17 @@ export const ActiveCallModal: React.FC = () => {
             </div>
           )}
 
-          {/* FREE TIME FINISHED OVERLAY MODAL (Server Authoritative) */}
-          {freeExpiredPayload && !isExtendedPaid && (
-            isConsumer ? (
-              <PaidContinuationModal
-                consultationId={activeCall.id}
-                consultationType={activeCall.callType}
-                expertName={freeExpiredPayload.expertName || 'Property Professional'}
-                expertRatePerMinute={freeExpiredPayload.expertRatePerMinute || 2.50}
-                currency={freeExpiredPayload.currency || 'NZD'}
-                currencySymbol={freeExpiredPayload.currencySymbol || '$'}
-                onConfirm={async (paymentMethodId) => {
-                  await extendCallPaid(paymentMethodId);
-                }}
-                onBookAppointment={handleBookAppointment}
-                onEnd={endActiveCall}
-              />
-            ) : (
-              <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-3 animate-pulse">
-                    <Clock className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-extrabold text-white">1 Minute Free Consultation Ended</h3>
-                  <p className="text-xs text-slate-300 mt-2">
-                    The complimentary 1-minute period has completed. The consultation is currently paused while the customer decides whether to continue as a paid session.
-                  </p>
-                  <div className="mt-5 p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-slate-400">
-                    Awaiting customer confirmation or conclusion...
-                  </div>
-                  <button
-                    onClick={endActiveCall}
-                    className="mt-4 w-full py-2.5 px-4 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold text-xs border border-red-500/30 transition flex items-center justify-center gap-2"
-                  >
-                    <PhoneOff className="w-4 h-4" />
-                    <span>Conclude Call</span>
-                  </button>
-                </div>
+          {/* Paused indicator on media stage when free consultation expires */}
+          {isFreeExpired && !isExtendedPaid && (
+            <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center">
+              <div className="px-3.5 py-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-2 mb-2">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Consultation Paused • Audio & Video Cut Off</span>
               </div>
-            )
+              <p className="text-xs text-slate-400 max-w-xs">
+                Zero audio or video transmission while awaiting continuation choice.
+              </p>
+            </div>
           )}
         </div>
 
@@ -286,7 +298,8 @@ export const ActiveCallModal: React.FC = () => {
           {/* Mute Button */}
           <button
             onClick={toggleMute}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            disabled={isFreeExpired && !isExtendedPaid}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition disabled:opacity-40 disabled:cursor-not-allowed ${
               isMuted ? 'bg-red-600/20 text-red-400 border border-red-500/40' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
             }`}
             title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
@@ -307,7 +320,8 @@ export const ActiveCallModal: React.FC = () => {
           {isVideo && (
             <button
               onClick={toggleVideo}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+              disabled={isFreeExpired && !isExtendedPaid}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition disabled:opacity-40 disabled:cursor-not-allowed ${
                 isVideoOff ? 'bg-red-600/20 text-red-400 border border-red-500/40' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
               }`}
               title={isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
@@ -317,6 +331,47 @@ export const ActiveCallModal: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* FREE TIME FINISHED OVERLAY MODAL (Server Authoritative) */}
+      {freeExpiredPayload && !isExtendedPaid && (
+        isConsumer ? (
+          <PaidContinuationModal
+            consultationId={activeCall.id}
+            consultationType={activeCall.callType}
+            expertName={freeExpiredPayload.expertName || 'Property Professional'}
+            expertRatePerMinute={freeExpiredPayload.expertRatePerMinute || 2.50}
+            currency={freeExpiredPayload.currency || 'NZD'}
+            currencySymbol={freeExpiredPayload.currencySymbol || '$'}
+            onConfirm={async (paymentMethodId) => {
+              await extendCallPaid(paymentMethodId);
+            }}
+            onBookAppointment={handleBookAppointment}
+            onEnd={endActiveCall}
+          />
+        ) : (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl text-center">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-3 animate-pulse">
+                <Clock className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-extrabold text-white">1 Minute Free Consultation Ended</h3>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                The complimentary 1-minute period has completed. The consultation is currently <strong>paused</strong> with zero audio or video transmission while the customer decides whether to continue as a paid session.
+              </p>
+              <div className="mt-5 p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-slate-400">
+                Awaiting customer confirmation or conclusion...
+              </div>
+              <button
+                onClick={endActiveCall}
+                className="mt-4 w-full py-2.5 px-4 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold text-xs border border-red-500/30 transition flex items-center justify-center gap-2"
+              >
+                <PhoneOff className="w-4 h-4" />
+                <span>Conclude Call (No Charge)</span>
+              </button>
+            </div>
+          </div>
+        )
+      )}
     </div>
   );
 };

@@ -22,6 +22,11 @@ import paymentRoutes from './routes/payment.routes';
 import expertEarningsRoutes from './routes/expert-earnings.routes';
 import webhookRoutes from './routes/webhook.routes';
 import notificationRoutes from './routes/notification.routes';
+import propertyRoutes from './routes/property.routes';
+import liveViewingRoutes from './routes/live-viewing.routes';
+import agentWebsiteRoutes from './routes/agent-website.routes';
+import seoArticleRoutes from './routes/seo-articles.routes';
+import { prisma } from './db/prisma';
 import { notificationService } from './services/notification.service';
 import { setupSocketServer } from './socket';
 import { appointmentReminderService } from './services/appointment-reminder.service';
@@ -41,9 +46,22 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
 ];
 
+const isAllowedOrigin = (origin?: string): boolean => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (origin.endsWith('.trycloudflare.com') || origin.endsWith('.loca.lt')) return true;
+  return false;
+};
+
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS origin ${origin} not allowed by PropertyTalk security policy`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   },
@@ -55,9 +73,7 @@ app.set('io', io);
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or same-origin)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`CORS origin ${origin} not allowed by PropertyTalk security policy`));
@@ -66,7 +82,13 @@ app.use(
   })
 );
 app.use(cookieParser());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // API Routes
 app.use('/api/auth/phone', phoneAuthRoutes);
@@ -84,6 +106,51 @@ app.use('/api/expert', expertEarningsRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/properties', propertyRoutes);
+app.use('/api/live-viewings', liveViewingRoutes);
+app.use('/api/agent-websites', agentWebsiteRoutes);
+app.use('/api/seo', seoArticleRoutes);
+
+// Public System Feature Flags & Country Launch Status
+app.get('/api/system/features', async (_req, res) => {
+  try {
+    const configs = await prisma.systemConfig.findMany({
+      where: {
+        key: {
+          in: [
+            'australia_enabled',
+            'remote_live_viewing_enabled',
+            'agent_mini_websites_enabled',
+            'ai_seo_articles_enabled',
+            'free_call_duration_seconds',
+          ],
+        },
+      },
+    });
+
+    const features: Record<string, boolean> = {
+      australia_enabled: false,
+      remote_live_viewing_enabled: true,
+      agent_mini_websites_enabled: true,
+      ai_seo_articles_enabled: true,
+    };
+
+    for (const c of configs) {
+      if (c.key === 'australia_enabled') features.australia_enabled = c.value === 'true';
+      if (c.key === 'remote_live_viewing_enabled') features.remote_live_viewing_enabled = c.value === 'true';
+      if (c.key === 'agent_mini_websites_enabled') features.agent_mini_websites_enabled = c.value === 'true';
+      if (c.key === 'ai_seo_articles_enabled') features.ai_seo_articles_enabled = c.value === 'true';
+    }
+
+    res.json({
+      success: true,
+      launchCountry: 'NZ',
+      features,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch platform features' });
+  }
+});
 
 notificationService.setSocketServer(io);
 

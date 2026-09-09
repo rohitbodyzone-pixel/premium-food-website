@@ -52,6 +52,11 @@ model User {
   notifications          Notification[]
   notificationPreference NotificationPreference?
   pushSubscriptions      PushSubscription[]
+  liveViewingBookings    LiveViewingParticipant[]     @relation("ConsumerLiveViewings")
+  propertyInquiries      PropertyInquiry[]            @relation("ConsumerPropertyInquiries")
+  physicalViewingBookings PhysicalViewingBooking[]    @relation("ConsumerPhysicalBookings")
+  savedProperties        SavedProperty[]              @relation("ConsumerSavedProperties")
+  privateListings        Property[]                   @relation("ConsumerPrivateListings")
 }
 
 model Country {
@@ -158,6 +163,10 @@ model ExpertProfile {
   billingSessions      ConsultationBillingSession[] @relation("ExpertBillingSessions")
   transactions         PaymentTransaction[]         @relation("ExpertTransactions")
   earnings             ExpertEarning[]
+  properties           Property[]                   @relation("ExpertProperties")
+  liveViewingSessions  LiveViewingSession[]         @relation("ExpertLiveViewings")
+  miniWebsite          AgentMiniWebsite?
+  articles             AgentArticle[]               @relation("ExpertArticles")
 }
 
 model VerificationDocument {
@@ -543,3 +552,214 @@ model PhoneVerification {
 
   @@index([phoneNumber])
 }
+
+model Property {
+  id                      String   @id @default(uuid())
+  title                   String
+  slug                    String   @unique
+  description             String
+  propertyType            String   // HOUSE, APARTMENT, TOWNHOUSE, LAND, COMMERCIAL, LIFESTYLE
+  listingType             String   @default("FOR_SALE") // FOR_SALE, FOR_RENT
+  priceMinorUnits         Int?
+  priceDisplay            String   // e.g. "$1,250,000", "By Negotiation", "$650/week"
+  bedrooms                Int      @default(0)
+  bathrooms               Int      @default(0)
+  parkingSpaces           Int      @default(0)
+  floorAreaM2             Float?
+  landAreaM2              Float?
+  streetAddress           String
+  suburb                  String
+  city                    String
+  countryCode             String   @default("NZ")
+  postalCode              String?
+  latitude                Float?
+  longitude               Float?
+  images                  String   // Stored as JSON array string: '["https://..."]'
+  videoUrl                String?
+  documents               String?  // Stored as JSON array string: '[{"title":"Title Copy","fileUrl":"...","type":"PDF"}]'
+  isPrivateListing        Boolean  @default(false)
+  
+  agentProfileId          String?  // Linked to ExpertProfile if listed by agent
+  privateOwnerId          String?  // Linked to User if private listing
+  
+  status                  String   @default("ACTIVE") // ACTIVE, UNDER_OFFER, SOLD, RENTED, DRAFT, ARCHIVED
+  isFeatured              Boolean  @default(false)
+  isModerated             Boolean  @default(true) // Super Admin moderation approval
+  remoteViewingAvailable  Boolean  @default(true)
+  viewsCount              Int      @default(0)
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  agentProfile            ExpertProfile?            @relation("ExpertProperties", fields: [agentProfileId], references: [id], onDelete: SetNull)
+  privateOwner            User?                     @relation("ConsumerPrivateListings", fields: [privateOwnerId], references: [id], onDelete: SetNull)
+  liveViewingSessions     LiveViewingSession[]
+  inquiries               PropertyInquiry[]
+  physicalViewingBookings PhysicalViewingBooking[]
+  savedByUsers            SavedProperty[]
+
+  @@index([city, suburb])
+  @@index([listingType, propertyType])
+}
+
+model LiveViewingSession {
+  id                      String   @id @default(uuid())
+  propertyId              String
+  hostProfileId           String   // ExpertProfile.id (must be REA or Property Manager)
+  viewingType             String   @default("GROUP") // GROUP, PRIVATE
+  title                   String?  // Custom session title or property address
+  scheduledAt             DateTime
+  durationMinutes         Int      @default(10) // Fixed 10-minute authoritative duration
+  ticketPriceMinorUnits   Int      @default(2000) // Default NZ$20 for group, NZ$60 for private
+  currency                String   @default("NZD")
+  minAttendees            Int      @default(5) // Minimum 5 required for group session confirmation
+  maxCapacity             Int      @default(10) // Default 10 for MVP, configurable up to 200
+  status                  String   @default("SCHEDULED") // SCHEDULED, LIVE, COMPLETED, CANCELLED, REFUNDED
+  startedAt               DateTime?
+  endedAt                 DateTime?
+  streamRoomId            String?  @unique // Unique WebRTC/broadcast room ID
+  streamingCostMinorUnits Int      @default(0) // Technology cost payable by agent from settlement
+  actualUsageMinutes      Float    @default(0) // Actual provider session duration in minutes
+  streamingCostType       String   @default("ESTIMATED_TEST") // "ESTIMATED_TEST" | "PROVIDER_ACTUAL"
+  isProductionProvider    Boolean  @default(false) // false when real WebRTC provider is not connected
+  providerCostDetails     String?  // JSON string storing usage and rate breakdown
+  
+  recordingAllowed        Boolean  @default(false) // Recording OFF by default
+  sellerConsentGiven      Boolean  @default(false) // Agent confirms seller/owner consent
+  recordingRetentionDays  Int      @default(7) // 7 or 30 days
+  recordingUrl            String?
+  replayExpiresAt         DateTime?
+  cancelReason            String?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  property                Property                  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  hostProfile             ExpertProfile             @relation("ExpertLiveViewings", fields: [hostProfileId], references: [id], onDelete: Cascade)
+  participants            LiveViewingParticipant[]
+
+  @@index([scheduledAt, status])
+}
+
+model LiveViewingParticipant {
+  id                      String   @id @default(uuid())
+  viewingSessionId        String
+  consumerId              String   // User.id
+  paymentStatus           String   @default("PENDING") // PENDING, PAID, REFUNDED
+  amountPaidMinorUnits    Int      @default(0)
+  currency                String   @default("NZD")
+  agentApprovalStatus     String   @default("PENDING") // PENDING, APPROVED, DECLINED
+  approvedAt              DateTime?
+  declinedAt              DateTime?
+  joinedAt                DateTime?
+  leftAt                  DateTime?
+  recordingConsentGiven   Boolean  @default(false)
+  transactionId           String?
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  viewingSession          LiveViewingSession @relation(fields: [viewingSessionId], references: [id], onDelete: Cascade)
+  consumer                User               @relation("ConsumerLiveViewings", fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@unique([viewingSessionId, consumerId])
+}
+
+model AgentMiniWebsite {
+  id                      String   @id @default(uuid())
+  expertProfileId         String   @unique
+  slug                    String   @unique // e.g. "sarah-jenkins" -> propertytalk.co.nz/agent/sarah-jenkins
+  customHeadline          String?
+  customAbout             String?
+  coverImageUrl           String?
+  agencyName              String?
+  agencyLogoUrl           String?
+  serviceAreas            String   @default("[]") // JSON string array of suburbs/regions
+  socialLinks             String   @default("{}") // JSON string object: { linkedin, facebook, instagram, website }
+  contactPhone            String?
+  contactEmail            String?
+  isPublished             Boolean  @default(true)
+  isModerated             Boolean  @default(true)
+  metaTitle               String?
+  metaDescription         String?
+  visitorCount            Int      @default(0)
+  enquiryCount            Int      @default(0)
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  expertProfile           ExpertProfile @relation(fields: [expertProfileId], references: [id], onDelete: Cascade)
+  articles                AgentArticle[]
+}
+
+model AgentArticle {
+  id                      String   @id @default(uuid())
+  agentProfileId          String
+  miniWebsiteId           String
+  title                   String
+  slug                    String   @unique
+  content                 String   // Full article content (Markdown/HTML)
+  summary                 String?
+  topic                   String   // Topic name
+  targetCity              String?
+  targetSuburb            String?
+  metaTitle               String?
+  metaDescription         String?
+  status                  String   @default("DRAFT") // DRAFT, AGENT_REVIEW, PUBLISHED, ARCHIVED
+  source                  String   @default("AI_SUGGESTED") // AI_SUGGESTED, MANUAL
+  isModerated             Boolean  @default(true)
+  viewsCount              Int      @default(0)
+  publishedAt             DateTime?
+  lastReviewedAt          DateTime?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  agentProfile            ExpertProfile    @relation("ExpertArticles", fields: [agentProfileId], references: [id], onDelete: Cascade)
+  miniWebsite             AgentMiniWebsite @relation(fields: [miniWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([slug, status])
+}
+
+model PropertyInquiry {
+  id                      String   @id @default(uuid())
+  propertyId              String
+  consumerId              String?
+  name                    String
+  email                   String
+  phone                   String?
+  message                 String
+  status                  String   @default("NEW") // NEW, READ, RESPONDED, CLOSED
+  createdAt               DateTime @default(now())
+
+  property                Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  consumer                User?    @relation("ConsumerPropertyInquiries", fields: [consumerId], references: [id], onDelete: SetNull)
+}
+
+model PhysicalViewingBooking {
+  id                      String   @id @default(uuid())
+  propertyId              String
+  consumerId              String
+  preferredDate           String   // "2026-09-20"
+  preferredTime           String   // "14:00"
+  notes                   String?
+  status                  String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  property                Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  consumer                User     @relation("ConsumerPhysicalBookings", fields: [consumerId], references: [id], onDelete: Cascade)
+}
+
+model SavedProperty {
+  id                      String   @id @default(uuid())
+  propertyId              String
+  consumerId              String
+  createdAt               DateTime @default(now())
+
+  property                Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  consumer                User     @relation("ConsumerSavedProperties", fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, consumerId])
+}
+

@@ -138,8 +138,10 @@ export class WebRTCManager {
     }
   }
 
+  private mediaPaused = false;
+
   toggleAudio(enabled?: boolean): boolean {
-    if (!this.localStream) return false;
+    if (!this.localStream || this.mediaPaused) return false;
     const audioTrack = this.localStream.getAudioTracks()[0];
     if (audioTrack) {
       audioTrack.enabled = enabled !== undefined ? enabled : !audioTrack.enabled;
@@ -149,13 +151,50 @@ export class WebRTCManager {
   }
 
   toggleVideo(enabled?: boolean): boolean {
-    if (!this.localStream) return false;
+    if (!this.localStream || this.mediaPaused) return false;
     const videoTrack = this.localStream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = enabled !== undefined ? enabled : !videoTrack.enabled;
       return videoTrack.enabled;
     }
     return false;
+  }
+
+  pauseMedia(): void {
+    this.mediaPaused = true;
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => {
+        track.enabled = false;
+      });
+    }
+    if (this.remoteStream) {
+      this.remoteStream.getTracks().forEach((track) => {
+        track.enabled = false;
+      });
+    }
+    console.log('🔇 [WebRTC] All media tracks strictly PAUSED (zero voice/video transmission)');
+  }
+
+  resumeMedia(options?: { isMuted?: boolean; isVideoOff?: boolean }): void {
+    this.mediaPaused = false;
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !options?.isMuted;
+      });
+      this.localStream.getVideoTracks().forEach((track) => {
+        track.enabled = !options?.isVideoOff;
+      });
+    }
+    if (this.remoteStream) {
+      this.remoteStream.getTracks().forEach((track) => {
+        track.enabled = true;
+      });
+    }
+    console.log('🔊 [WebRTC] Media tracks RESUMED after authorization');
+  }
+
+  isMediaPaused(): boolean {
+    return this.mediaPaused;
   }
 
   getLocalStream(): MediaStream | null {
@@ -216,5 +255,6 @@ export class WebRTCManager {
     }
     this.pendingCandidates = [];
     this.config = null;
+    this.mediaPaused = false;
   }
 }

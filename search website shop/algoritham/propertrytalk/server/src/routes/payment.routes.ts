@@ -26,6 +26,22 @@ router.get('/config', async (_req: Request, res: Response) => {
 router.use(requireAuth);
 
 /**
+ * Create SetupIntent for client-side card attachment
+ */
+router.post('/setup-intent', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const customer = await billingService.ensurePaymentCustomer(userId);
+    const provider = getPaymentProvider();
+    const result = await provider.createSetupIntent(customer.providerCustomerId);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error creating setup intent:', error);
+    res.status(500).json({ error: error.message || 'Failed to create setup intent' });
+  }
+});
+
+/**
  * Get customer's saved payment methods (masked summaries only)
  */
 router.get('/methods', async (req: Request, res: Response) => {

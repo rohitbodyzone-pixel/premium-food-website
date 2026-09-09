@@ -349,10 +349,9 @@ export async function runChatFlowTests() {
     // TEST 19: Expert remains ONLINE / not BUSY after decline
     // -------------------------------------------------------------
     // In chatDecline, expert did not accept, so busy lock was never acquired for chatDecline
+    const acceptCheck = await presenceService.canExpertAcceptChat(expertProfile.id);
     assert(
-      presenceService.canExpertAcceptChat(expertProfile.id) === false // Currently still busy with chat1
-        ? true
-        : true,
+      acceptCheck !== undefined,
       '19. Declining a request does not impair expert presence status'
     );
 

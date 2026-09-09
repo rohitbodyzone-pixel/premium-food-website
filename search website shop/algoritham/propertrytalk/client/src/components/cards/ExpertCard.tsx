@@ -12,6 +12,7 @@ import {
   Info,
   X,
 } from 'lucide-react';
+import { VerifiedBadge } from '../common/VerifiedBadge';
 
 interface ExpertCardProps {
   expert: Expert;
@@ -122,20 +123,15 @@ export const ExpertCard: React.FC<ExpertCardProps> = ({ expert, onSaveToggle }) 
             {expert.name}
           </h3>
 
-          {/* Verified Badge */}
+          {/* Category-Specific Verified Badge */}
           {expert.verificationStatus === 'VERIFIED' && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowVerifiedTooltip(!showVerifiedTooltip);
-              }}
-              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-full hover:bg-emerald-100 transition"
-              title="Verified by PropertyTalk"
-            >
-              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-              <span>Verified</span>
-            </button>
+            <VerifiedBadge
+              categorySlug={expert.category?.slug}
+              categoryName={expert.category?.name}
+              licenseNumber={expert.licenseNumber}
+              isVerified={true}
+              size="sm"
+            />
           )}
         </div>
 

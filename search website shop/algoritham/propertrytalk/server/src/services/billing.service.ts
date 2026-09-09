@@ -1,6 +1,7 @@
 import { prisma } from '../db/prisma';
 import { getPaymentProvider } from './payment/payment-provider.factory';
 import { Server } from 'socket.io';
+import { notificationService } from './notification.service';
 
 export class BillingService {
   private io?: Server;
@@ -450,6 +451,18 @@ export class BillingService {
       });
     }
 
+    if (transactionStatus === 'CAPTURED' && grossAmountMinorUnits > 0) {
+      notificationService.createNotification({
+        userId: session.consumerId,
+        type: 'PAYMENT_RECEIPT',
+        title: 'Payment Receipt',
+        body: `Receipt for your ${session.consultationType.toLowerCase()} consultation: $${costChargedFloat.toFixed(2)} ${session.currency}`,
+        dataJson: { billingSessionId: session.id, transactionId: transaction.id, url: '/notifications' },
+        priority: 'NORMAL',
+        dedupeKey: `receipt_${session.id}`,
+      }).catch(() => {});
+    }
+
     return updatedSession;
   }
 
@@ -539,6 +552,16 @@ export class BillingService {
         },
       }).catch(() => {});
     }
+
+    notificationService.createNotification({
+      userId: tx.consumerId,
+      type: 'REFUND_PROCESSED',
+      title: 'Refund Processed',
+      body: `A refund of $${(refundAmount / 100).toFixed(2)} ${tx.currency} has been processed for your consultation.`,
+      dataJson: { transactionId: tx.id, refundId: refund.id, url: '/notifications' },
+      priority: 'NORMAL',
+      dedupeKey: `refund_${refund.id}`,
+    }).catch(() => {});
 
     return {
       success: true,

@@ -8,10 +8,21 @@ export class ResendEmailProvider implements IEmailProvider {
   private fromAddress: string;
   private fromName: string;
 
+  private lastDispatchId: string | null = null;
+  private lastError: string | null = null;
+
   constructor(apiKey: string, fromAddress?: string, fromName?: string) {
     this.apiKey = apiKey;
-    this.fromAddress = fromAddress || 'notifications@propertytalk.com';
+    this.fromAddress = fromAddress || 'onboarding@resend.dev';
     this.fromName = fromName || 'PropertyTalk';
+  }
+
+  getLastDispatchId(): string | null {
+    return this.lastDispatchId;
+  }
+
+  getLastError(): string | null {
+    return this.lastError;
   }
 
   private async sendRawEmail(params: {
@@ -19,6 +30,9 @@ export class ResendEmailProvider implements IEmailProvider {
     subject: string;
     html: string;
   }): Promise<boolean> {
+    this.lastDispatchId = null;
+    this.lastError = null;
+
     return new Promise((resolve) => {
       const payload = JSON.stringify({
         from: `${this.fromName} <${this.fromAddress}>`,
@@ -44,8 +58,14 @@ export class ResendEmailProvider implements IEmailProvider {
         res.on('data', (chunk) => body += chunk);
         res.on('end', () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const data = JSON.parse(body);
+              this.lastDispatchId = data.id || null;
+            } catch {}
+            console.log(`📧 [ResendEmailProvider] Email accepted by Resend for ${params.to}. Status: ${res.statusCode}, ID: ${this.lastDispatchId}`);
             resolve(true);
           } else {
+            this.lastError = body || `Status ${res.statusCode}`;
             console.error('Resend API Error:', res.statusCode, body);
             resolve(false);
           }
@@ -53,6 +73,7 @@ export class ResendEmailProvider implements IEmailProvider {
       });
 
       req.on('error', (err) => {
+        this.lastError = err.message;
         console.error('Resend HTTPS request error:', err);
         resolve(false);
       });
@@ -60,6 +81,22 @@ export class ResendEmailProvider implements IEmailProvider {
       req.write(payload);
       req.end();
     });
+  }
+
+  async sendTestEmail(params: { to: string; name?: string }): Promise<boolean> {
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 style="color: #0f172a; margin-top: 0;">PropertyTalk — System Integration Test</h2>
+        <p style="color: #334155; font-size: 15px;">Hi ${params.name || 'User'},</p>
+        <p style="color: #334155; font-size: 15px; line-height: 1.6;">This is a real test email dispatched from PropertyTalk via <strong>Resend</strong> to verify operational email readiness.</p>
+        <div style="background-color: #f8fafc; border-left: 4px solid #059669; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+          <p style="margin: 0; color: #0f172a; font-weight: 600;">Status: Verified Operational</p>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Timestamp: ${new Date().toUTCString()}</p>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 12px;">PropertyTalk Platform Integration Notification</p>
+      </div>
+    `;
+    return this.sendRawEmail({ to: params.to, subject: 'PropertyTalk System Test — Resend Integration Verified', html });
   }
 
   async sendEmailVerification(params: {

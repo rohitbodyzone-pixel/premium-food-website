@@ -62,6 +62,29 @@ export const CustomerHeader: React.FC = () => {
                 </span>
               </div>
             </Link>
+
+            {/* Desktop Navigation Links */}
+            <nav className="hidden md:flex items-center gap-1 ml-4">
+              <Link
+                to="/explore"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition"
+              >
+                Explore Properties
+              </Link>
+              <Link
+                to="/live-viewings"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition flex items-center gap-1"
+              >
+                <span>Live Viewings</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              </Link>
+              <Link
+                to="/experts"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition"
+              >
+                Find Professionals
+              </Link>
+            </nav>
           </div>
 
           {/* CENTER: Selected Advice Country Pill (NZ or AU) */}

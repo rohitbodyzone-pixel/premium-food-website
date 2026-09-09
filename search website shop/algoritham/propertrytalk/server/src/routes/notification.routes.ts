@@ -7,14 +7,14 @@ const router = Router();
 
 // Public push configuration endpoint
 router.get('/push/config', (_req: Request, res: Response) => {
-  const publicKey = process.env.WEB_PUSH_PUBLIC_KEY || null;
+  const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY || null;
   res.json({
     pushEnabled: Boolean(publicKey),
     publicKey,
     mode: publicKey ? 'PRODUCTION' : 'DEVELOPMENT_MOCK',
     instructions: publicKey
       ? 'Web Push is active with configured VAPID credentials.'
-      : 'DEVELOPMENT NOTIFICATION MODE: In-app real-time alerts are fully active. Set WEB_PUSH_PUBLIC_KEY and WEB_PUSH_PRIVATE_KEY for external browser push.',
+      : 'DEVELOPMENT NOTIFICATION MODE: In-app real-time alerts are fully active. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY for external browser push.',
   });
 });
 
@@ -152,8 +152,13 @@ router.post('/push/subscribe', async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { endpoint, keys } = req.body;
 
-    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    if (!endpoint || typeof endpoint !== 'string' || !keys?.p256dh || !keys?.auth) {
       res.status(400).json({ error: 'Valid push subscription object is required.' });
+      return;
+    }
+
+    if (!endpoint.startsWith('https://') && !endpoint.startsWith('http://localhost')) {
+      res.status(400).json({ error: 'Invalid push subscription endpoint protocol.' });
       return;
     }
 
@@ -200,6 +205,27 @@ router.post('/push/unsubscribe', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Push subscription removed' });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to unsubscribe' });
+  }
+});
+
+/**
+ * Send test push notification to user's registered devices
+ */
+router.post('/push/test', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const notification = await notificationService.createNotification({
+      userId,
+      type: 'SYSTEM_ALERT',
+      title: 'PropertyTalk Push Test',
+      body: 'Real VAPID web push notification received successfully!',
+      dataJson: { url: '/notifications' },
+      priority: 'HIGH',
+    });
+
+    res.json({ success: true, notification });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to send test push' });
   }
 });
 

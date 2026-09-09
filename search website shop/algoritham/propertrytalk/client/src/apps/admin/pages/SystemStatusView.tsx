@@ -10,6 +10,12 @@ import {
   RefreshCw,
   Clock,
   Zap,
+  Phone,
+  Mail,
+  CreditCard,
+  Bell,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react';
 
 export const SystemStatusView: React.FC = () => {
@@ -194,8 +200,194 @@ export const SystemStatusView: React.FC = () => {
               </span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] uppercase font-bold block">Fallback Channel</span>
-              <span className="text-slate-200 mt-0.5 block font-mono text-[11px]">Socket.io Data Relay</span>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">TURN Relay</span>
+              <span className="text-slate-200 mt-0.5 block font-mono text-[11px]">
+                {status?.webrtc?.turnConfigured ? 'Active (TURN Relay)' : 'STUN Only (Direct P2P)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* E. SMS Gateway Integration */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-amber-950/80 border border-amber-800/60 text-amber-300">
+                <Phone className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-white">SMS Gateway</h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {status?.sms?.provider || 'DevelopmentSmsProvider'}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                status?.sms?.configured
+                  ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                  : 'bg-amber-950 border border-amber-800 text-amber-300'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{status?.sms?.configured ? 'Twilio Live' : 'Dev Console'}</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Configured</span>
+              <span className={`font-mono text-[11px] font-bold mt-0.5 block ${status?.sms?.configured ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {status?.sms?.configuredStatus || (status?.sms?.configured ? 'YES' : 'NO')}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Sender</span>
+              <span className="text-slate-200 mt-0.5 block font-mono text-[11px] truncate">
+                {status?.sms?.senderNumber || 'Console Preview'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Real SMS Test</span>
+              <span className={`font-bold text-[11px] mt-0.5 block ${
+                status?.sms?.realSmsTest === 'PASS'
+                  ? 'text-emerald-400'
+                  : status?.sms?.realSmsTest === 'FAILED'
+                  ? 'text-rose-400'
+                  : 'text-slate-400'
+              }`}>
+                {status?.sms?.realSmsTest || 'NOT TESTED'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Last Test</span>
+              <span className="text-slate-200 mt-0.5 block text-[11px] font-mono truncate">
+                {status?.sms?.lastTestAt ? new Date(status.sms.lastTestAt).toLocaleTimeString() : 'None'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* F. Transactional Email Service */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-sky-950/80 border border-sky-800/60 text-sky-300">
+                <Mail className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-white">Email Dispatcher</h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {status?.email?.provider || 'DevelopmentEmailProvider'}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                status?.email?.configured
+                  ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                  : 'bg-sky-950 border border-sky-800 text-sky-300'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{status?.email?.configured ? 'Resend API' : 'Dev Console'}</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">From Address</span>
+              <span className="text-slate-200 mt-0.5 block font-mono text-[11px] truncate">
+                {status?.email?.fromAddress || 'notifications@propertytalk.com'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Link Protection</span>
+              <span className="text-slate-200 mt-0.5 block text-[11px]">
+                {status?.backend?.nodeEnv === 'production' ? 'Links Redacted' : 'Inspectable'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* G. Payments & Stripe Safety Guard */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-emerald-950/80 border border-emerald-800/60 text-emerald-300">
+                <CreditCard className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-white">Payment Engine</h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {status?.payment?.provider || 'MockPaymentProvider'}
+                </span>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950 border border-emerald-800 text-emerald-300">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Live Charges Blocked</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Mode</span>
+              <span className="text-slate-200 mt-0.5 block font-mono text-[11px]">
+                {status?.payment?.stripeTestModeConfigured ? 'Stripe Test (sk_test_)' : 'Mock Billing'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Live Money Guard</span>
+              <span className="text-emerald-400 mt-0.5 block font-bold text-[11px]">
+                Active (sk_live_ Blocked)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* H. Browser Web Push & In-App Alerts */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-950/80 border border-rose-800/60 text-rose-300">
+                <Bell className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-white">Browser Push Provider</h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {status?.webPush?.provider || 'Web Push / VAPID'}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                status?.webPush?.configured
+                  ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                  : 'bg-purple-950 border border-purple-800 text-purple-300'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{status?.webPush?.configured ? 'VAPID Active' : 'In-App Active'}</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">VAPID Configured</span>
+              <span
+                className={`mt-0.5 block font-mono font-bold text-[11px] ${
+                  status?.webPush?.configured ? 'text-emerald-400' : 'text-slate-400'
+                }`}
+              >
+                {status?.webPush?.configured ? 'YES (RFC 8292)' : 'NO'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] uppercase font-bold block">Service Worker</span>
+              <span className="text-emerald-400 mt-0.5 block font-bold text-[11px]">
+                {status?.webPush?.serviceWorkerAvailable ? 'Available (/sw.js)' : 'Unavailable'}
+              </span>
             </div>
           </div>
         </div>

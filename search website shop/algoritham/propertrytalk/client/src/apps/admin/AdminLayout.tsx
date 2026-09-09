@@ -21,6 +21,8 @@ import {
   ChevronRight,
   CreditCard,
   Bell,
+  Video,
+  ToggleRight,
 } from 'lucide-react';
 
 export const AdminLayout: React.FC = () => {
@@ -35,6 +37,10 @@ export const AdminLayout: React.FC = () => {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Feature Flags', path: '/features', icon: ToggleRight },
+    { label: 'Live Viewing Rules', path: '/live-viewing-rules', icon: Video },
+    { label: 'Listings Moderation', path: '/moderation/listings', icon: Building2 },
+    { label: 'Content Moderation', path: '/moderation/content', icon: ShieldCheck },
     { label: 'Expert Verification', path: '/verification', icon: ShieldCheck },
     { label: 'Experts', path: '/experts', icon: Award },
     { label: 'Customers', path: '/customers', icon: Users },

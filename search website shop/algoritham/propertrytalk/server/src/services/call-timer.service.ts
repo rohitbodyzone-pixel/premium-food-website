@@ -54,7 +54,11 @@ export class CallTimerService {
   /**
    * Starts the server-authoritative timer when a call connects
    */
-  async startCallTimer(callSessionId: string, durationSeconds?: number): Promise<ActiveTimer> {
+  async startCallTimer(
+    callSessionId: string,
+    durationSeconds?: number,
+    initialExtendedPaid?: boolean
+  ): Promise<ActiveTimer> {
     this.stopCallTimer(callSessionId);
 
     const call = await prisma.callSession.findUnique({
@@ -72,7 +76,9 @@ export class CallTimerService {
     }
 
     const freeSeconds =
-      durationSeconds ?? (await this.getConfiguredFreeDurationSeconds(call.expert.countryCode));
+      durationSeconds !== undefined
+        ? Math.max(0, durationSeconds)
+        : (await this.getConfiguredFreeDurationSeconds(call.expert.countryCode));
     const freeMinutesAllowed = Math.round(freeSeconds / 60);
 
     const rateMinorUnitsPerMinute =
@@ -88,21 +94,42 @@ export class CallTimerService {
         status: 'IN_PROGRESS',
         connectedAt: now,
         freeMinutesAllowed,
-        freeSecondsRemaining: freeSeconds,
+        freeSecondsRemaining: initialExtendedPaid ? 0 : freeSeconds,
       },
     });
 
+    const isExpired = freeSeconds <= 0 && !initialExtendedPaid;
+    const isPaid = Boolean(initialExtendedPaid);
+
     const activeTimer: ActiveTimer = {
       callSessionId,
-      freeSecondsRemaining: freeSeconds,
+      freeSecondsRemaining: isPaid ? 0 : freeSeconds,
       totalElapsedSeconds: 0,
       paidSecondsElapsed: 0,
       freeMinutesAllowed,
-      isFreeExpired: false,
-      extendedPaid: false,
+      isFreeExpired: isExpired,
+      extendedPaid: isPaid,
       rateMinorUnitsPerMinute,
       currency,
     };
+
+    if (isExpired && this.io) {
+      setTimeout(() => {
+        if (this.io) {
+          this.io.to(`call_${callSessionId}`).emit('call:free_time_expired', {
+            callSessionId,
+            message: 'Your 1-minute free consultation has concluded.',
+            expertRatePerMinute: activeTimer.rateMinorUnitsPerMinute / 100,
+            rateMinorUnitsPerMinute: activeTimer.rateMinorUnitsPerMinute,
+            currency: activeTimer.currency,
+            currencySymbol: activeTimer.currency === 'AUD' ? 'A$' : 'NZ$',
+            expertHourlyRate: call.expert.hourlyRate,
+            expertId: call.expertId,
+            expertName: call.expert.user.name,
+          });
+        }
+      }, 300);
+    }
 
     activeTimer.intervalId = setInterval(async () => {
       activeTimer.totalElapsedSeconds += 1;

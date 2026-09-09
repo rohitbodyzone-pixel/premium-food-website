@@ -24,15 +24,22 @@ export class DevelopmentSmsProvider implements ISmsProvider {
     };
     this.dispatchedMessages.push(record);
 
-    console.log('\n======================================================');
-    console.log('📱 [DEV SMS MODE] Phone Verification OTP Dispatched');
-    console.log(`To: ${details.to}`);
-    if (details.name) {
-      console.log(`User: ${details.name}`);
+    if (process.env.NODE_ENV === 'production') {
+      const maskedPhone = details.to.length > 5 
+        ? `${details.to.slice(0, 3)}***${details.to.slice(-2)}` 
+        : '***';
+      console.log(`📱 [PROD SMS FALLBACK] OTP dispatched to ${maskedPhone} (plaintext OTP suppressed for production security)`);
+    } else {
+      console.log('\n======================================================');
+      console.log('📱 [DEV SMS MODE] Phone Verification OTP Dispatched');
+      console.log(`To: ${details.to}`);
+      if (details.name) {
+        console.log(`User: ${details.name}`);
+      }
+      console.log(`🔑 6-Digit OTP: ${details.otp}`);
+      console.log(`⏳ Code expires in ${details.expiresMinutes} minutes. Single-use only. Max 3 attempts.`);
+      console.log('======================================================\n');
     }
-    console.log(`🔑 6-Digit OTP: ${details.otp}`);
-    console.log(`⏳ Code expires in ${details.expiresMinutes} minutes. Single-use only. Max 3 attempts.`);
-    console.log('======================================================\n');
 
     return true;
   }

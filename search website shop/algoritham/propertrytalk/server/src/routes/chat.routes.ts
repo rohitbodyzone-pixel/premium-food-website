@@ -240,8 +240,9 @@ router.post('/:id/accept', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Busy check
-    if (presenceService.isExpertBusy(chat.expertId)) {
+    // Busy check: Allow if lock already belongs to this chat
+    const activeLock = presenceService.getActiveConsultation(chat.expertId);
+    if (activeLock && activeLock.sessionId !== id && activeLock.chatId !== id) {
       res.status(409).json({ error: 'You are currently registered in another active consultation.' });
       return;
     }
@@ -249,7 +250,10 @@ router.post('/:id/accept', requireAuth, async (req: Request, res: Response) => {
     const now = new Date();
 
     // Atomically acquire busy lock
-    const locked = presenceService.lockExpertBusy(chat.expertId, id);
+    const locked = presenceService.lockExpertBusy(chat.expertId, id, {
+      chatId: id,
+      consumerId: chat.consumerId,
+    });
     if (!locked) {
       res.status(409).json({ error: 'You are currently registered in another active consultation.' });
       return;

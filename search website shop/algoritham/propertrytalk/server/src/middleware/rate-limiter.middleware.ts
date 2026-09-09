@@ -79,3 +79,14 @@ export const callRequestRateLimiter = createRateLimiter({
   message: 'Too many call requests initiated. Please wait a moment before trying again.',
   keyGenerator: (req) => `${req.user?.id || req.ip}_call_requests`,
 });
+
+export const phoneOtpRateLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  maxRequests: 10,
+  message: 'Too many SMS OTP requests for this phone number or network. Please wait a few minutes before trying again.',
+  keyGenerator: (req) => {
+    const rawPhone = req.body?.phoneNumber || '';
+    const phoneKey = rawPhone.replace(/\D/g, '') || 'anon_phone';
+    return `${req.ip}_${phoneKey}`;
+  },
+});

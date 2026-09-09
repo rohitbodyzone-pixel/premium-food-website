@@ -20,12 +20,16 @@ export class WebRTCCallProvider implements ICallProvider {
     const turnCredential = process.env.WEBRTC_TURN_CREDENTIAL;
 
     if (turnUrl && turnUsername && turnCredential) {
+      const turnUrls = turnUrl.includes(',')
+        ? turnUrl.split(',').map((u) => u.trim()).filter(Boolean)
+        : turnUrl.trim();
+
       servers.push({
-        urls: turnUrl,
-        username: turnUsername,
-        credential: turnCredential,
+        urls: turnUrls,
+        username: turnUsername.trim(),
+        credential: turnCredential.trim(),
       });
-      console.log('🛡️ [WebRTC] TURN relay server configured.');
+      console.log('🛡️ [WebRTC] Metered TURN relay servers configured with UDP/TCP/TLS fallback.');
     } else {
       console.info('ℹ️ [WebRTC] TURN not configured; some NAT/mobile-network calls may fail in strict firewall environments.');
     }

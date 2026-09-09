@@ -17,15 +17,23 @@ import { ChatsListPage } from '../../pages/ChatsListPage';
 import { ChatPage } from '../../pages/ChatPage';
 import { CallHistoryPage } from '../../pages/CallHistoryPage';
 import { ExpertEarningsPage } from '../../pages/ExpertEarningsPage';
+import { ExpertAvailabilityPage } from '../../pages/ExpertAvailabilityPage';
 import { ProfilePage } from '../../pages/ProfilePage';
 import { NotificationsPage } from '../../pages/NotificationsPage';
-import { ExpertAvailabilityPage } from '../../pages/ExpertAvailabilityPage';
+
+// Real Estate Agent & Property Specialist Pages
+import { AgentPropertiesPage } from './pages/AgentPropertiesPage';
+import { AgentLiveViewingsPage } from './pages/AgentLiveViewingsPage';
+import { AgentMiniWebsiteEditorPage } from './pages/AgentMiniWebsiteEditorPage';
+import { AgentSeoArticlesPage } from './pages/AgentSeoArticlesPage';
+import { AgentLeadsPage } from './pages/AgentLeadsPage';
 
 // Call & Consultation Modals (Required for receiving incoming calls & chats)
 import { IncomingCallModal } from '../../components/call/IncomingCallModal';
 import { IncomingChatModal } from '../../components/call/IncomingChatModal';
 import { ActiveCallModal } from '../../components/call/ActiveCallModal';
 import { ReviewModal } from '../../components/cards/ReviewModal';
+import { ErrorBoundary } from '../../components/common/ErrorBoundary';
 
 export const ExpertApp: React.FC = () => {
   return (
@@ -33,13 +41,15 @@ export const ExpertApp: React.FC = () => {
       <AuthProvider>
         <CountryProvider>
           <SocketProvider>
-            <div data-app="propertytalk-expert" className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
-              {/* Expert Portal Header */}
-              <ExpertHeader />
+            <ErrorBoundary name="ExpertRoot">
+              <div data-app="propertytalk-expert" className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
+                {/* Expert Portal Header */}
+                <ExpertHeader />
 
-              {/* Main Content */}
-              <main className="flex-1">
-                <Routes>
+                {/* Main Content */}
+                <main className="flex-1">
+                  <ErrorBoundary name="ExpertRoutes">
+                    <Routes>
                   {/* Public Auth Routes */}
                   <Route path="/login" element={<ExpertAuthPage />} />
                   <Route path="/register" element={<ExpertAuthPage />} />
@@ -134,23 +144,77 @@ export const ExpertApp: React.FC = () => {
                     }
                   />
 
+                  {/* Real Estate Agent & Specialist Routes */}
+                  <Route
+                    path="/properties"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentPropertiesPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/live-viewings"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentLiveViewingsPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/mini-website"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentMiniWebsiteEditorPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/articles"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentSeoArticlesPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/seo-articles"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentSeoArticlesPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/leads"
+                    element={
+                      <ExpertProtectedRoute>
+                        <AgentLeadsPage />
+                      </ExpertProtectedRoute>
+                    }
+                  />
+
                   {/* Default / Fallback Routes */}
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/admin/*" element={<Navigate to="/dashboard" replace />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
-              </main>
+              </ErrorBoundary>
+            </main>
 
-              {/* Call & Chat Modals */}
+            {/* Call & Chat Modals */}
+            <ErrorBoundary name="ExpertModals">
               <IncomingCallModal />
               <IncomingChatModal />
               <ActiveCallModal />
               <ReviewModal />
-            </div>
-          </SocketProvider>
-        </CountryProvider>
-      </AuthProvider>
-    </BrowserRouter>
+            </ErrorBoundary>
+          </div>
+        </ErrorBoundary>
+      </SocketProvider>
+    </CountryProvider>
+  </AuthProvider>
+</BrowserRouter>
   );
 };
 

@@ -3,6 +3,12 @@ import { prisma } from '../db/prisma';
 
 export type PresenceStatus = 'ONLINE' | 'BUSY' | 'OFFLINE';
 
+export interface ActiveConsultationLock {
+  sessionId: string;
+  chatId?: string;
+  consumerId?: string;
+}
+
 export class PresenceService {
   private io: Server | null = null;
   
@@ -12,8 +18,8 @@ export class PresenceService {
   // expertProfileId -> Set of active socket IDs
   private expertSockets = new Map<string, Set<string>>();
   
-  // expertProfileId -> callSessionId (atomic busy lock)
-  private activeConsultations = new Map<string, string>();
+  // expertProfileId -> ActiveConsultationLock (atomic busy lock)
+  private activeConsultations = new Map<string, ActiveConsultationLock>();
   
   // expertProfileId -> Timeout ID for disconnect grace period
   private disconnectGraceTimers = new Map<string, NodeJS.Timeout>();
@@ -146,27 +152,62 @@ export class PresenceService {
   }
 
   /**
-   * Atomic busy lock: Attempts to lock expert for a consultation call session.
-   * Returns false if expert is already busy in another call (prevents race condition).
+   * Atomic busy lock: Attempts to lock expert for a consultation session (chat or call).
+   * If already locked for the SAME consultation (same chatId or consumerId),
+   * permits atomic update to new session ID (e.g. Chat -> Call upgrade).
+   * If already locked for a DIFFERENT consultation, returns false.
    */
-  lockExpertBusy(expertProfileId: string, callSessionId: string): boolean {
-    if (this.activeConsultations.has(expertProfileId)) {
-      const existingSession = this.activeConsultations.get(expertProfileId);
-      if (existingSession !== callSessionId) {
-        return false; // Already busy with another call
+  lockExpertBusy(
+    expertProfileId: string,
+    sessionId: string,
+    meta?: { chatId?: string; consumerId?: string }
+  ): boolean {
+    const existing = this.activeConsultations.get(expertProfileId);
+    if (existing) {
+      if (existing.sessionId === sessionId) {
+        return true; // Already locked for this exact session
+      }
+      // Check if this is the SAME consultation
+      const isSameConsultation =
+        Boolean(meta?.chatId && (existing.chatId === meta.chatId || existing.sessionId === meta.chatId)) ||
+        Boolean(meta?.consumerId && existing.consumerId === meta.consumerId);
+
+      if (!isSameConsultation) {
+        return false; // Actually busy with another consultation/customer
       }
     }
-    this.activeConsultations.set(expertProfileId, callSessionId);
+
+    const prev = this.activeConsultations.get(expertProfileId);
+    this.activeConsultations.set(expertProfileId, {
+      sessionId,
+      chatId: meta?.chatId || prev?.chatId || sessionId,
+      consumerId: meta?.consumerId || prev?.consumerId,
+    });
     this.broadcastPresenceChange(expertProfileId, 'BUSY');
-    console.log(`🟡 [Presence] Expert ${expertProfileId} locked as BUSY for call ${callSessionId}`);
+    console.log(`🟡 [Presence] Expert ${expertProfileId} locked as BUSY for session ${sessionId} (chat: ${meta?.chatId || prev?.chatId || sessionId})`);
     return true;
   }
 
   /**
    * Release busy lock when consultation finishes.
+   * If sessionId matches current session or root chatId, releases the lock.
    */
-  async releaseExpertBusy(expertProfileId: string, callSessionId: string) {
-    if (this.activeConsultations.get(expertProfileId) === callSessionId) {
+  async releaseExpertBusy(expertProfileId: string, sessionId: string, returnToChatId?: string) {
+    const existing = this.activeConsultations.get(expertProfileId);
+    if (!existing) return;
+
+    if (existing.sessionId === sessionId || existing.chatId === sessionId) {
+      if (returnToChatId) {
+        this.activeConsultations.set(expertProfileId, {
+          sessionId: returnToChatId,
+          chatId: returnToChatId,
+          consumerId: existing.consumerId,
+        });
+        this.broadcastPresenceChange(expertProfileId, 'BUSY');
+        console.log(`🟡 [Presence] Expert ${expertProfileId} busy lock reverted to chat ${returnToChatId}`);
+        return;
+      }
+
       this.activeConsultations.delete(expertProfileId);
 
       // Check current DB online status
@@ -186,6 +227,13 @@ export class PresenceService {
    */
   isExpertBusy(expertProfileId: string): boolean {
     return this.activeConsultations.has(expertProfileId);
+  }
+
+  /**
+   * Get active consultation metadata if locked.
+   */
+  getActiveConsultation(expertProfileId: string): ActiveConsultationLock | undefined {
+    return this.activeConsultations.get(expertProfileId);
   }
 
   /**
@@ -224,8 +272,12 @@ export class PresenceService {
 
   /**
    * Validate if an expert is eligible to receive a call.
+   * If options match the active consultation, escalation is permitted.
    */
-  async canExpertAcceptCall(expertProfileId: string): Promise<{ eligible: boolean; reason?: string }> {
+  async canExpertAcceptCall(
+    expertProfileId: string,
+    options?: { chatId?: string; consumerId?: string }
+  ): Promise<{ eligible: boolean; reason?: string }> {
     const expert = await prisma.expertProfile.findUnique({
       where: { id: expertProfileId },
       select: { verificationStatus: true, isOnline: true },
@@ -240,7 +292,15 @@ export class PresenceService {
     }
 
     if (this.isExpertBusy(expertProfileId)) {
-      return { eligible: false, reason: 'Expert is currently busy in another consultation.' };
+      const existing = this.activeConsultations.get(expertProfileId);
+      const isSameConsultation = existing && (
+        Boolean(options?.chatId && (existing.sessionId === options.chatId || existing.chatId === options.chatId)) ||
+        Boolean(options?.consumerId && existing.consumerId === options.consumerId)
+      );
+
+      if (!isSameConsultation) {
+        return { eligible: false, reason: 'Expert is currently busy in another consultation.' };
+      }
     }
 
     return { eligible: true };
@@ -248,8 +308,12 @@ export class PresenceService {
 
   /**
    * Validate if an expert is eligible to accept a chat consultation.
+   * If options match the active consultation, escalation is permitted.
    */
-  async canExpertAcceptChat(expertProfileId: string): Promise<{ eligible: boolean; reason?: string }> {
+  async canExpertAcceptChat(
+    expertProfileId: string,
+    options?: { chatId?: string; consumerId?: string }
+  ): Promise<{ eligible: boolean; reason?: string }> {
     const expert = await prisma.expertProfile.findUnique({
       where: { id: expertProfileId },
       select: { verificationStatus: true, isOnline: true },
@@ -264,7 +328,15 @@ export class PresenceService {
     }
 
     if (this.isExpertBusy(expertProfileId)) {
-      return { eligible: false, reason: 'Expert is currently busy in another consultation.' };
+      const existing = this.activeConsultations.get(expertProfileId);
+      const isSameConsultation = existing && (
+        Boolean(options?.chatId && (existing.sessionId === options.chatId || existing.chatId === options.chatId)) ||
+        Boolean(options?.consumerId && existing.consumerId === options.consumerId)
+      );
+
+      if (!isSameConsultation) {
+        return { eligible: false, reason: 'Expert is currently busy in another consultation.' };
+      }
     }
 
     return { eligible: true };

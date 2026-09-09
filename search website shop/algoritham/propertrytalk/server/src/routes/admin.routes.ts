@@ -3,8 +3,10 @@ import { prisma } from '../db/prisma';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { getPaymentProvider } from '../services/payment/payment-provider.factory';
 import { billingService } from '../services/billing.service';
-import { maskPhoneNumber } from '../services/phone.service';
+import { maskPhoneNumber, phoneService, normalizePhoneNumber } from '../services/phone.service';
 import { getSmsProvider } from '../services/sms/sms-provider.factory';
+import { getEmailProvider } from '../services/email/email-provider.factory';
+import { WebRTCCallProvider } from '../services/call-provider/webrtc-call-provider';
 
 const router = Router();
 
@@ -695,12 +697,64 @@ router.get('/system-status', async (req: Request, res: Response) => {
     const totalExperts = await prisma.expertProfile.count();
     const activeCalls = await prisma.callSession.count({ where: { status: 'CONNECTED' } });
 
+    // Inspect External Providers safely without exposing credentials
+    const paymentProvider = getPaymentProvider();
+    const smsProvider = getSmsProvider();
+    const emailProvider = getEmailProvider();
+    const webrtcProvider = new WebRTCCallProvider();
+    const iceServers = webrtcProvider.getIceServers();
+    const turnConfigured = Boolean(
+      process.env.WEBRTC_TURN_URL &&
+      process.env.WEBRTC_TURN_USERNAME &&
+      process.env.WEBRTC_TURN_CREDENTIAL
+    );
+
+    const hasStripeTestKey = Boolean(process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_'));
+    const hasStripeWebhook = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+    const hasVapidKeys = Boolean(
+      (process.env.VAPID_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY) &&
+      (process.env.VAPID_PRIVATE_KEY || process.env.WEB_PUSH_PRIVATE_KEY)
+    );
+    const totalPushSubscriptions = await prisma.pushSubscription.count();
+    const isTwilioConfigured = Boolean(
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_PHONE_NUMBER
+    );
+    const isEmailConfigured = Boolean(
+      process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY
+    );
+
+    // Free consultation duration config
+    const freeCallConfig = await prisma.systemConfig.findUnique({
+      where: { key: 'free_call_duration_seconds' },
+    });
+    const freeDuration = freeCallConfig ? Number(freeCallConfig.value) : 60;
+
+    // Inspect last real SMS test attempt for governance status
+    const lastSmsLog = await prisma.notificationLog.findFirst({
+      where: { channel: 'SMS' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let realSmsTestStatus: 'NOT TESTED' | 'PASS' | 'FAILED' = 'NOT TESTED';
+    let lastTestTimestamp: string | null = null;
+    if (lastSmsLog) {
+      lastTestTimestamp = lastSmsLog.createdAt.toISOString();
+      if (lastSmsLog.status === 'DELIVERED') {
+        realSmsTestStatus = 'PASS';
+      } else if (lastSmsLog.status === 'FAILED') {
+        realSmsTestStatus = 'FAILED';
+      }
+    }
+
     res.json({
       backend: {
         status: 'Online',
         port: 5000,
         uptimeSeconds: Math.round(process.uptime()),
         timestamp: new Date().toISOString(),
+        nodeEnv: process.env.NODE_ENV || 'development',
       },
       database: {
         status: 'Connected',
@@ -714,8 +768,49 @@ router.get('/system-status', async (req: Request, res: Response) => {
       },
       webrtc: {
         stunServers: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
-        turnConfigured: false,
+        turnConfigured,
+        topology: turnConfigured ? 'STUN_AND_TURN' : 'STUN_ONLY',
         signallingState: 'Active via Socket.io',
+      },
+      sms: {
+        provider: smsProvider.name,
+        providerType: smsProvider.isDevelopment ? 'Development' : 'Twilio',
+        isDevelopment: smsProvider.isDevelopment,
+        configured: isTwilioConfigured,
+        configuredStatus: isTwilioConfigured ? 'YES' : 'NO',
+        senderNumber: process.env.TWILIO_PHONE_NUMBER
+          ? maskPhoneNumber(process.env.TWILIO_PHONE_NUMBER)
+          : 'Console Preview',
+        realSmsTest: realSmsTestStatus,
+        lastTestAt: lastTestTimestamp,
+      },
+      email: {
+        provider: emailProvider.name,
+        isDevelopment: emailProvider.isDevelopment,
+        configured: isEmailConfigured,
+        fromAddress: process.env.EMAIL_FROM_ADDRESS || 'notifications@propertytalk.com',
+      },
+      payment: {
+        provider: paymentProvider.name,
+        isMock: paymentProvider.isMock,
+        stripeTestModeConfigured: hasStripeTestKey,
+        stripeWebhookConfigured: hasStripeWebhook,
+        liveModeGuardActive: true,
+        liveChargesBlocked: true,
+      },
+      webPush: {
+        provider: 'Web Push / VAPID (RFC 8291)',
+        configured: hasVapidKeys,
+        configuredStatus: hasVapidKeys ? 'YES' : 'NO',
+        serviceWorkerAvailable: true,
+        subscriptionsCount: totalPushSubscriptions,
+        mode: hasVapidKeys ? 'PRODUCTION_VAPID' : 'DEVELOPMENT_MOCK',
+        fallback: 'In-App Realtime Push',
+      },
+      governance: {
+        firstMinuteFreeEnforced: true,
+        freeDurationSeconds: freeDuration,
+        zeroAutoChargeEnforced: true,
       },
       metrics: {
         onlineExperts,
@@ -1196,4 +1291,375 @@ router.get('/sms-config', async (req: Request, res: Response) => {
   }
 });
 
+// 22. Super Admin Authorized Real SMS Test Dispatch
+router.post('/sms/test-dispatch', async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, countryCode = 'NZ' } = req.body;
+
+    if (!phoneNumber || !phoneNumber.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'READY FOR REAL SMS TEST — TEST PHONE NUMBER REQUIRED',
+        message: 'Please provide a valid destination test phone number in E.164 or national format.',
+      });
+      return;
+    }
+
+    const norm = normalizePhoneNumber(phoneNumber, countryCode);
+    if (!norm.isValid || !norm.e164) {
+      res.status(400).json({
+        success: false,
+        error: norm.error || 'Invalid phone number format.',
+      });
+      return;
+    }
+
+    const smsProvider = getSmsProvider();
+    const testOtp = phoneService.generateNumericOtp();
+
+    const sent = await smsProvider.sendOtp({
+      to: norm.e164,
+      otp: testOtp,
+      expiresMinutes: 5,
+      countryCode: norm.country,
+      name: 'Super Admin Test',
+    });
+
+    // Record audit log
+    await prisma.notificationLog.create({
+      data: {
+        userId: req.user!.id,
+        type: 'PHONE_OTP_ADMIN_TEST',
+        channel: 'SMS',
+        status: smsProvider.isDevelopment ? 'SENT_CONSOLE' : (sent ? 'DELIVERED' : 'FAILED'),
+        provider: smsProvider.name,
+        referenceId: maskPhoneNumber(norm.e164),
+      },
+    }).catch(() => {});
+
+    if (!sent && !smsProvider.isDevelopment) {
+      const lastError = (smsProvider as any).getLastError?.();
+      res.status(400).json({
+        success: false,
+        error: lastError?.safeMessage || 'Twilio failed to dispatch test SMS.',
+        code: lastError?.code,
+        recipient: maskPhoneNumber(norm.e164),
+      });
+      return;
+    }
+
+    const dispatchResult = (smsProvider as any).getLastDispatchResult?.();
+
+    res.json({
+      success: true,
+      provider: smsProvider.name,
+      recipient: maskPhoneNumber(norm.e164),
+      messageStatus: dispatchResult?.status || (smsProvider.isDevelopment ? 'SENT_CONSOLE' : 'ACCEPTED'),
+      messageSidMasked: dispatchResult?.sid
+        ? `${dispatchResult.sid.slice(0, 4)}••••${dispatchResult.sid.slice(-4)}`
+        : 'DEV_MOCK_SID',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error('Super Admin SMS test-dispatch error:', err);
+    res.status(500).json({ error: 'Failed to execute test SMS dispatch.' });
+  }
+});
+
+// ==========================================
+// SUPER ADMIN PRODUCT STRUCTURE GOVERNANCE
+// ==========================================
+
+// 21. Feature Flags & Optional Module Toggles
+router.get('/feature-flags', async (_req: Request, res: Response) => {
+  try {
+    const configs = await prisma.systemConfig.findMany({
+      where: {
+        key: {
+          in: [
+            'australia_enabled',
+            'remote_live_viewing_enabled',
+            'agent_mini_websites_enabled',
+            'ai_seo_articles_enabled',
+            'free_call_duration_seconds',
+          ],
+        },
+      },
+    });
+
+    const flags: Record<string, boolean> = {
+      australia_enabled: false,
+      remote_live_viewing_enabled: true,
+      agent_mini_websites_enabled: true,
+      ai_seo_articles_enabled: true,
+    };
+
+    for (const c of configs) {
+      if (c.key === 'australia_enabled') flags.australia_enabled = c.value === 'true';
+      if (c.key === 'remote_live_viewing_enabled') flags.remote_live_viewing_enabled = c.value === 'true';
+      if (c.key === 'agent_mini_websites_enabled') flags.agent_mini_websites_enabled = c.value === 'true';
+      if (c.key === 'ai_seo_articles_enabled') flags.ai_seo_articles_enabled = c.value === 'true';
+    }
+
+    res.json(flags);
+  } catch (error) {
+    console.error('Error fetching feature flags:', error);
+    res.status(500).json({ error: 'Failed to fetch feature flags' });
+  }
+});
+
+router.put('/feature-flags/:key', async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const { enabled } = req.body;
+
+    const valStr = enabled ? 'true' : 'false';
+
+    const updated = await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value: valStr },
+      create: {
+        key,
+        value: valStr,
+        description: `Platform feature toggle for ${key}`,
+      },
+    });
+
+    // If toggling australia_enabled, also sync Country table isActive for AU
+    if (key === 'australia_enabled') {
+      await prisma.country.updateMany({
+        where: { code: 'AU' },
+        data: { isActive: !!enabled },
+      });
+    }
+
+    res.json({ success: true, key: updated.key, enabled: updated.value === 'true' });
+  } catch (error) {
+    console.error('Error updating feature flag:', error);
+    res.status(500).json({ error: 'Failed to update feature flag' });
+  }
+});
+
+// 22. Live Viewing Rules & Pricing Controls
+router.get('/live-viewing-rules', async (_req: Request, res: Response) => {
+  try {
+    const keys = [
+      'group_viewing_min_price_minor',
+      'group_viewing_max_price_minor',
+      'group_viewing_default_price_minor',
+      'group_viewing_min_attendees',
+      'group_viewing_default_capacity',
+      'private_viewing_price_minor',
+      'streaming_cost_per_session_minor',
+      'recording_default_retention_days',
+    ];
+
+    const configs = await prisma.systemConfig.findMany({
+      where: { key: { in: keys } },
+    });
+
+    const rules: Record<string, number> = {
+      group_viewing_min_price_minor: 1000,
+      group_viewing_max_price_minor: 5000,
+      group_viewing_default_price_minor: 2000,
+      group_viewing_min_attendees: 5,
+      group_viewing_default_capacity: 10,
+      private_viewing_price_minor: 6000,
+      streaming_cost_per_session_minor: 150,
+      recording_default_retention_days: 7,
+    };
+
+    for (const c of configs) {
+      const num = parseInt(c.value, 10);
+      if (!isNaN(num)) rules[c.key] = num;
+    }
+
+    res.json(rules);
+  } catch (error) {
+    console.error('Error fetching live viewing rules:', error);
+    res.status(500).json({ error: 'Failed to fetch rules' });
+  }
+});
+
+router.put('/live-viewing-rules', async (req: Request, res: Response) => {
+  try {
+    const updates = req.body; // e.g. { group_viewing_default_price_minor: 2500, minAttendees: 5, ... }
+
+    for (const [k, v] of Object.entries(updates)) {
+      await prisma.systemConfig.upsert({
+        where: { key: k },
+        update: { value: String(v) },
+        create: {
+          key: k,
+          value: String(v),
+          description: `Super Admin configured rule for ${k}`,
+        },
+      });
+    }
+
+    res.json({ success: true, message: 'Live viewing rules updated successfully' });
+  } catch (error) {
+    console.error('Error saving live viewing rules:', error);
+    res.status(500).json({ error: 'Failed to save rules' });
+  }
+});
+
+// 23. Listings Moderation
+router.get('/properties', async (req: Request, res: Response) => {
+  try {
+    const { status, city } = req.query;
+    const where: any = {};
+    if (status) where.status = String(status);
+    if (city) where.city = { contains: String(city) };
+
+    const properties = await prisma.property.findMany({
+      where,
+      include: {
+        agentProfile: {
+          include: {
+            user: { select: { name: true, email: true } },
+            category: true,
+          },
+        },
+        privateOwner: {
+          select: { name: true, email: true },
+        },
+        _count: { select: { liveViewingSessions: true, inquiries: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    res.json(properties);
+  } catch (error) {
+    console.error('Error fetching properties for admin:', error);
+    res.status(500).json({ error: 'Failed to fetch listings' });
+  }
+});
+
+router.put('/properties/:id/moderation', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isModerated, status, isFeatured } = req.body;
+
+    const updated = await prisma.property.update({
+      where: { id },
+      data: {
+        isModerated: isModerated !== undefined ? !!isModerated : undefined,
+        status: status !== undefined ? status : undefined,
+        isFeatured: isFeatured !== undefined ? !!isFeatured : undefined,
+      },
+    });
+
+    res.json({ success: true, property: updated });
+  } catch (error) {
+    console.error('Error moderating property:', error);
+    res.status(500).json({ error: 'Failed to update property moderation' });
+  }
+});
+
+// 24. Mini-Websites Moderation
+router.get('/moderation/mini-websites', async (_req: Request, res: Response) => {
+  try {
+    const websites = await prisma.agentMiniWebsite.findMany({
+      include: {
+        expertProfile: {
+          include: {
+            user: { select: { name: true, email: true } },
+            category: true,
+          },
+        },
+        _count: { select: { articles: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(websites);
+  } catch (error) {
+    console.error('Error fetching mini websites for admin:', error);
+    res.status(500).json({ error: 'Failed to fetch mini websites' });
+  }
+});
+
+router.put('/moderation/mini-websites/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isModerated, isPublished } = req.body;
+
+    const updated = await prisma.agentMiniWebsite.update({
+      where: { id },
+      data: {
+        isModerated: isModerated !== undefined ? !!isModerated : undefined,
+        isPublished: isPublished !== undefined ? !!isPublished : undefined,
+      },
+    });
+
+    res.json({ success: true, miniWebsite: updated });
+  } catch (error) {
+    console.error('Error moderating mini website:', error);
+    res.status(500).json({ error: 'Failed to update mini website moderation' });
+  }
+});
+
+// 25. SEO Articles Moderation
+router.get('/moderation/articles', async (_req: Request, res: Response) => {
+  try {
+    const articles = await prisma.agentArticle.findMany({
+      include: {
+        agentProfile: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    res.json(articles);
+  } catch (error) {
+    console.error('Error fetching articles for admin:', error);
+    res.status(500).json({ error: 'Failed to fetch articles' });
+  }
+});
+
+router.put('/moderation/articles/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isModerated, status } = req.body;
+
+    const updated = await prisma.agentArticle.update({
+      where: { id },
+      data: {
+        isModerated: isModerated !== undefined ? !!isModerated : undefined,
+        status: status !== undefined ? status : undefined,
+      },
+    });
+
+    res.json({ success: true, article: updated });
+  } catch (error) {
+    console.error('Error moderating article:', error);
+    res.status(500).json({ error: 'Failed to moderate article' });
+  }
+});
+
+// 26. Category ON/OFF and Active Toggle
+router.put('/categories/:id/toggle-active', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const updated = await prisma.category.update({
+      where: { id },
+      data: { isActive: !!isActive },
+    });
+
+    res.json({ success: true, category: updated });
+  } catch (error) {
+    console.error('Error toggling category:', error);
+    res.status(500).json({ error: 'Failed to toggle category active state' });
+  }
+});
+
 export default router;
+

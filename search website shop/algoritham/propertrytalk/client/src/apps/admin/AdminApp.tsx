@@ -21,6 +21,10 @@ import { RegistersView } from './pages/RegistersView';
 import { SystemStatusView } from './pages/SystemStatusView';
 import { AuditLogsView } from './pages/AuditLogsView';
 import { NotificationLogsView } from './pages/NotificationLogsView';
+import { FeatureFlagsView } from './pages/FeatureFlagsView';
+import { LiveViewingRulesView } from './pages/LiveViewingRulesView';
+import { ListingsModerationView } from './pages/ListingsModerationView';
+import { ContentModerationView } from './pages/ContentModerationView';
 
 export const AdminApp: React.FC = () => {
   return (
@@ -40,6 +44,11 @@ export const AdminApp: React.FC = () => {
               }
             >
               <Route path="/dashboard" element={<DashboardView />} />
+              <Route path="/features" element={<FeatureFlagsView />} />
+              <Route path="/feature-flags" element={<FeatureFlagsView />} />
+              <Route path="/live-viewing-rules" element={<LiveViewingRulesView />} />
+              <Route path="/moderation/listings" element={<ListingsModerationView />} />
+              <Route path="/moderation/content" element={<ContentModerationView />} />
               <Route path="/verification" element={<VerificationView />} />
               <Route path="/experts" element={<ExpertsView />} />
               <Route path="/customers" element={<CustomersView />} />
