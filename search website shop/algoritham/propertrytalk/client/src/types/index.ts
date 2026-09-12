@@ -226,6 +226,10 @@ export interface Property {
   city: string;
   countryCode: string;
   postalCode?: string | null;
+  formattedAddress?: string | null;
+  region?: string | null;
+  googlePlaceId?: string | null;
+  addressValidationStatus?: 'VERIFIED' | 'NEEDS_CONFIRMATION' | 'COULD_NOT_VERIFY' | null;
   latitude?: number | null;
   longitude?: number | null;
   images: string[];
@@ -239,10 +243,109 @@ export interface Property {
   isModerated: boolean;
   remoteViewingAvailable: boolean;
   viewsCount: number;
+  legalDescription?: string | null;
+  titleReference?: string | null;
+  estateType?: string | null;
+  councilName?: string | null;
+  districtZoning?: string | null;
+  capitalValueMinorUnits?: number | null;
+  landValueMinorUnits?: number | null;
+  improvementsValueMinorUnits?: number | null;
+  valuationDate?: string | null;
+  valuationSource?: string | null;
+  estimatedValueMinorUnits?: number | null;
+  estimatedLowerMinorUnits?: number | null;
+  estimatedUpperMinorUnits?: number | null;
+  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  estimateDate?: string | null;
+  estimateSource?: string | null;
+  rentWeeklyEstimatedMinorUnits?: number | null;
+  rentWeeklyLowerMinorUnits?: number | null;
+  rentWeeklyUpperMinorUnits?: number | null;
+  rentEstimateDate?: string | null;
+  rentEstimateSource?: string | null;
   isSaved?: boolean;
   liveViewingSessions?: LiveViewingSession[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type AmenityCategory =
+  | 'schools'
+  | 'supermarkets'
+  | 'hospitals'
+  | 'pharmacies'
+  | 'parks'
+  | 'gyms'
+  | 'petrol_stations'
+  | 'cafes'
+  | 'transit';
+
+export interface NearbyAmenityItem {
+  id: string;
+  placeId: string;
+  category: AmenityCategory;
+  categoryLabel: string;
+  name: string;
+  formattedAddress: string;
+  distanceMeters: number;
+  distanceText: string;
+  rating: number | null;
+  userRatingCount: number | null;
+  openNow: boolean | null;
+  locationLat: number;
+  locationLng: number;
+}
+
+export interface NearbyAmenitiesResponse {
+  enabled: boolean;
+  propertyId?: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  amenities: NearbyAmenityItem[];
+  byCategory: Record<string, NearbyAmenityItem[]>;
+  categoriesAvailable: string[];
+  totalCount: number;
+  cached?: boolean;
+  fetchedAt?: string;
+  message?: string;
+}
+
+export interface CorrectedField {
+  field: string;
+  original: string;
+  corrected: string;
+  suggested?: string;
+}
+
+export interface AddressValidationResult {
+  status: 'VERIFIED' | 'NEEDS_CONFIRMATION' | 'COULD_NOT_VERIFY';
+  formattedAddress: string;
+  streetAddress: string;
+  suburb: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  googlePlaceId: string | null;
+  hasCorrections: boolean;
+  correctedFields: CorrectedField[];
+  unconfirmedComponents: string[];
+  message: string;
+  addressComponents?: {
+    streetNumber?: string;
+    route?: string;
+    suburb?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  geocodeGranularity?: string;
 }
 
 export interface LiveViewingSession {
@@ -327,5 +430,159 @@ export interface AgentArticle {
   analytics?: { views: number; estimatedImpressions: number; clicks: number };
   createdAt: string;
   updatedAt: string;
+}
+
+// ----------------------------------------------------
+// Trade Me Property Insights Equivalent Interfaces
+// ----------------------------------------------------
+
+export interface NZSchoolItem {
+  id: string;
+  name: string;
+  schoolType: string;
+  distanceMeters: number;
+  distanceText: string;
+  yearLevels: string;
+  gender: 'Co-educational' | 'Boys School' | 'Girls School';
+  authority: 'State' | 'State-Integrated' | 'Private';
+  zoneStatus: 'IN_ZONE' | 'OUT_OF_ZONE' | 'NOT_ZONED' | 'UNKNOWN' | 'UNAVAILABLE';
+  decile?: number | null;
+  enrolmentRoll?: number;
+  source?: string;
+  sourceUpdateDate?: string;
+}
+
+export interface PropertyValuationEstimate {
+  available: boolean;
+  estimatedValueMinorUnits?: number | null;
+  estimatedValueDisplay?: string;
+  estimatedLowerMinorUnits?: number | null;
+  estimatedLowerDisplay?: string;
+  estimatedUpperMinorUnits?: number | null;
+  estimatedUpperDisplay?: string;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  lastUpdated?: string;
+  source?: string;
+  unavailabilityReason?: string;
+}
+
+export interface RentalEstimate {
+  available: boolean;
+  weeklyRentEstimatedMinorUnits?: number | null;
+  weeklyRentDisplay?: string;
+  weeklyLowerMinorUnits?: number | null;
+  weeklyUpperMinorUnits?: number | null;
+  weeklyRangeDisplay?: string;
+  lastUpdated?: string;
+  source?: string;
+  label?: 'Property Rent Estimate' | 'Area Market Rent';
+}
+
+export interface RentalYieldResult {
+  available: boolean;
+  grossYieldPercentage?: number | null;
+  grossYieldDisplay?: string;
+  annualRentDisplay?: string;
+  formula?: string;
+  disclaimer?: string;
+}
+
+export interface PropertySalesHistoryItem {
+  id: string;
+  saleDate: string;
+  saleYear: number;
+  priceMinorUnits: number;
+  priceDisplay: string;
+  saleType: string;
+}
+
+export interface NearbySoldPropertyItem {
+  id: string;
+  address: string;
+  suburb: string;
+  city: string;
+  soldPriceMinorUnits: number;
+  soldPriceDisplay: string;
+  soldDate: string;
+  bedrooms: number;
+  bathrooms: number;
+  parkingSpaces: number;
+  floorAreaM2?: number | null;
+  propertyType: string;
+  distanceMeters: number;
+  distanceText: string;
+  imageUrl?: string;
+}
+
+export interface PropertyLegalDetails {
+  available?: boolean;
+  parcelId?: string | null;
+  legalDescription?: string | null;
+  titleReference?: string | null;
+  estateType?: string | null;
+  landAreaM2?: number | null;
+  floorAreaM2?: number | null;
+  councilName?: string | null;
+  districtZoning?: string | null;
+  parcelGeometry?: any | null;
+  source?: string;
+  sourceRecordId?: string;
+  status?: 'LIVE' | 'WAITING_FOR_PROVIDER_CREDENTIALS' | 'UNAVAILABLE';
+  unavailabilityReason?: string;
+  fetchedAt?: string | null;
+  lastUpdated?: string | null;
+}
+
+export interface CouncilHazardOverlay {
+  isHazardDataAvailable: boolean;
+  councilName: string;
+  status?: 'HAZARD_LAYER_MATCH' | 'NO_LAYER_INTERSECTION' | 'DATA_UNAVAILABLE' | 'PROVIDER_UNAVAILABLE';
+  overlays: {
+    type: string;
+    label: string;
+    severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'INFO';
+    description: string;
+    sourceUrl?: string;
+  }[];
+  limNotice: string;
+  unavailabilityReason?: string;
+}
+
+export interface DataSourceInfo {
+  module: string;
+  source: string;
+  sourceRecordId?: string;
+  sourceDate?: string;
+  status: 'LIVE' | 'CACHED' | 'UNAVAILABLE' | 'WAITING_FOR_CREDENTIALS' | 'DISABLED';
+  message?: string;
+}
+
+export interface TradeMePropertyInsightsResponse {
+  propertyId: string;
+  enabled?: boolean;
+  message?: string;
+  valuation: PropertyValuationEstimate;
+  rental: RentalEstimate;
+  rentalYield: RentalYieldResult;
+  councilValuation: {
+    capitalValueMinorUnits?: number | null;
+    capitalValueDisplay?: string;
+    landValueMinorUnits?: number | null;
+    landValueDisplay?: string;
+    improvementsValueMinorUnits?: number | null;
+    improvementsValueDisplay?: string;
+    valuationDate?: string | null;
+    valuationSource?: string | null;
+  };
+  schools: {
+    totalCount: number;
+    inZoneCount: number;
+    schools: NZSchoolItem[];
+  };
+  salesHistory: PropertySalesHistoryItem[];
+  nearbySales: NearbySoldPropertyItem[];
+  legalDetails: PropertyLegalDetails;
+  hazards: CouncilHazardOverlay;
+  dataSources?: DataSourceInfo[];
 }
 

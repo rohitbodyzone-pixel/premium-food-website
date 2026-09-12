@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db/prisma';
 import Stripe from 'stripe';
+import { chatTimerService } from '../services/chat-timer.service';
 
 const router = Router();
 
@@ -112,12 +113,43 @@ router.post('/stripe', async (req: Request, res: Response) => {
               },
             });
 
-            // 1. If Consultation
+            // 1. If Consultation Billing Session exists
             if (tx.billingSession && tx.billingSession.status !== 'COMPLETED') {
               await prisma.consultationBillingSession.update({
                 where: { id: tx.billingSession.id },
                 data: { status: 'COMPLETED' },
               });
+            }
+
+            // 1b. If Consultation Paid Continuation PaymentIntent
+            if (paymentIntent.metadata?.type === 'CONSULTATION_PAID_CONTINUATION') {
+              const consultationId = paymentIntent.metadata.consultationId;
+              const consultationType = paymentIntent.metadata.consultationType || 'CHAT';
+              if (consultationId && consultationType === 'CHAT') {
+                await prisma.consultationChat.update({
+                  where: { id: consultationId },
+                  data: {
+                    extendedPaid: true,
+                    isFreeExpired: false,
+                    status: 'PAID_ACTIVE',
+                  },
+                });
+
+                const timer = chatTimerService.getTimerState(consultationId);
+                if (timer) {
+                  timer.extendedPaid = true;
+                  timer.isFreeExpired = false;
+                }
+
+                const io = req.app.get('io');
+                if (io) {
+                  io.to(`consultation_${consultationId}`).to(`chat_${consultationId}`).emit('chat:paid_continuation_activated', {
+                    chatId: consultationId,
+                    consultationId,
+                    status: 'PAID_ACTIVE',
+                  });
+                }
+              }
             }
 
             // 2. If Live Viewing Ticket: payment succeeds, agentApprovalStatus MUST remain PENDING!
@@ -165,6 +197,19 @@ router.post('/stripe', async (req: Request, res: Response) => {
                 where: { id: tx.billingSession.id },
                 data: { status: 'FAILED' },
               });
+            }
+            if (paymentIntent.metadata?.type === 'CONSULTATION_PAID_CONTINUATION') {
+              const consultationId = paymentIntent.metadata.consultationId;
+              if (consultationId) {
+                const io = req.app.get('io');
+                if (io) {
+                  io.to(`consultation_${consultationId}`).to(`chat_${consultationId}`).emit('chat:payment_error', {
+                    chatId: consultationId,
+                    consultationId,
+                    message: errorMsg,
+                  });
+                }
+              }
             }
             if (tx.liveViewingParticipantId) {
               await prisma.liveViewingParticipant.update({

@@ -50,6 +50,10 @@ const isAllowedOrigin = (origin?: string): boolean => {
   if (!origin) return true;
   if (allowedOrigins.includes(origin)) return true;
   if (origin.endsWith('.trycloudflare.com') || origin.endsWith('.loca.lt')) return true;
+  // Allow local LAN development IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x) for multi-device testing
+  if (/^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)) {
+    return true;
+  }
   return false;
 };
 
@@ -122,6 +126,8 @@ app.get('/api/system/features', async (_req, res) => {
             'remote_live_viewing_enabled',
             'agent_mini_websites_enabled',
             'ai_seo_articles_enabled',
+            'google_maps_enabled',
+            'google_places_enabled',
             'free_call_duration_seconds',
           ],
         },
@@ -133,6 +139,8 @@ app.get('/api/system/features', async (_req, res) => {
       remote_live_viewing_enabled: true,
       agent_mini_websites_enabled: true,
       ai_seo_articles_enabled: true,
+      google_maps_enabled: true,
+      google_places_enabled: true,
     };
 
     for (const c of configs) {
@@ -140,6 +148,8 @@ app.get('/api/system/features', async (_req, res) => {
       if (c.key === 'remote_live_viewing_enabled') features.remote_live_viewing_enabled = c.value === 'true';
       if (c.key === 'agent_mini_websites_enabled') features.agent_mini_websites_enabled = c.value === 'true';
       if (c.key === 'ai_seo_articles_enabled') features.ai_seo_articles_enabled = c.value === 'true';
+      if (c.key === 'google_maps_enabled') features.google_maps_enabled = c.value === 'true';
+      if (c.key === 'google_places_enabled') features.google_places_enabled = c.value === 'true';
     }
 
     res.json({
@@ -186,8 +196,8 @@ appointmentReminderService.startScheduler();
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
-  console.log(`🚀 PropertyTalk Backend Server running on http://localhost:${PORT}`);
+server.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 PropertyTalk Backend Server running on http://0.0.0.0:${PORT}`);
   console.log(`📡 Realtime Socket.io active on port ${PORT}`);
 });
 

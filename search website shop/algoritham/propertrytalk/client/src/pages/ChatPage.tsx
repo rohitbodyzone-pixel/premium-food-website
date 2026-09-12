@@ -54,6 +54,8 @@ export const ChatPage: React.FC = () => {
   const [localSeconds, setLocalSeconds] = useState<number>(60);
   const [localExpired, setLocalExpired] = useState<boolean>(false);
   const [localPaid, setLocalPaid] = useState<boolean>(false);
+  const [paymentPending, setPaymentPending] = useState<boolean>(false);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +186,30 @@ export const ChatPage: React.FC = () => {
       }
     };
 
+    const handlePaymentPending = (payload: any) => {
+      if (!payload || payload.chatId === chatId) {
+        setPaymentPending(true);
+        setPaymentErrorMessage(null);
+      }
+    };
+
+    const handlePaidContinuationActivated = (payload: any) => {
+      if (!payload || payload.chatId === chatId || payload.consultationId === chatId) {
+        setPaymentPending(false);
+        setPaymentErrorMessage(null);
+        setLocalPaid(true);
+        setLocalExpired(false);
+        setChat((prev) => (prev ? { ...prev, status: 'PAID_ACTIVE', extendedPaid: true, isFreeExpired: false } : null));
+      }
+    };
+
+    const handlePaymentError = (payload: any) => {
+      if (!payload || payload.chatId === chatId || payload.consultationId === chatId) {
+        setPaymentPending(false);
+        setPaymentErrorMessage(payload.message || 'Payment processing failed');
+      }
+    };
+
     socket.on('chat:message', handleNewMessage);
     socket.on('chat:accepted', handleChatAccepted);
     socket.on('chat:connected', handleChatAccepted);
@@ -191,6 +217,9 @@ export const ChatPage: React.FC = () => {
     socket.on('chat:cancelled', handleChatCancelled);
     socket.on('chat:request_timeout', handleChatTimeout);
     socket.on('chat:ended', handleChatEnded);
+    socket.on('chat:payment_pending', handlePaymentPending);
+    socket.on('chat:paid_continuation_activated', handlePaidContinuationActivated);
+    socket.on('chat:payment_error', handlePaymentError);
 
     return () => {
       socket.emit('chat:leave', chatId);
@@ -201,6 +230,9 @@ export const ChatPage: React.FC = () => {
       socket.off('chat:cancelled', handleChatCancelled);
       socket.off('chat:request_timeout', handleChatTimeout);
       socket.off('chat:ended', handleChatEnded);
+      socket.off('chat:payment_pending', handlePaymentPending);
+      socket.off('chat:paid_continuation_activated', handlePaidContinuationActivated);
+      socket.off('chat:payment_error', handlePaymentError);
     };
   }, [socket, chatId]);
 
@@ -242,8 +274,12 @@ export const ChatPage: React.FC = () => {
       return;
     }
 
-    if (isFreeExpired && !extendedPaid && isConsumer) {
-      alert('Your free introductory minute has concluded. Please select an option to continue.');
+    if (isFreeExpired && !extendedPaid && user?.role !== 'SUPER_ADMIN') {
+      alert(
+        isConsumer
+          ? 'Your free introductory minute has concluded. Please select an option to continue.'
+          : 'The customer introductory free minute has concluded. Waiting for paid continuation.'
+      );
       return;
     }
 
@@ -518,16 +554,32 @@ export const ChatPage: React.FC = () => {
               )}
 
               {isConnected && !extendedPaid && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>FREE {formatTimer(effectiveSeconds)}</span>
-                </div>
+                isFreeExpired ? (
+                  paymentPending ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>PAYMENT PENDING</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>FREE EXPIRED</span>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>FREE {formatTimer(effectiveSeconds)}</span>
+                  </div>
+                )
               )}
 
               {isConnected && extendedPaid && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
                   <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
-                  <span>PAID ACTIVE</span>
+                  <span>
+                    PAID ACTIVE • {currencyCode === 'AUD' ? 'A$' : 'NZ$'}{(chatTimerState?.ratePerMinute || (chat.expert?.chatRateMinorUnits ? chat.expert.chatRateMinorUnits / 100 : expertRate)).toFixed(2)}/min
+                  </span>
                 </div>
               )}
 
@@ -801,10 +853,12 @@ export const ChatPage: React.FC = () => {
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            disabled={isFreeExpired && !extendedPaid && isConsumer}
+            disabled={isFreeExpired && !extendedPaid && user?.role !== 'SUPER_ADMIN'}
             placeholder={
-              isFreeExpired && !extendedPaid && isConsumer
-                ? 'Free introductory minute ended. Select an option above to continue.'
+              isFreeExpired && !extendedPaid
+                ? (isConsumer
+                    ? 'Free introductory minute ended. Select an option above to continue.'
+                    : 'Customer free introductory minute ended. Awaiting paid continuation...')
                 : 'Ask a question or discuss consultation details...'
             }
             className="flex-1 px-3 py-2 text-sm bg-transparent outline-hidden text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
@@ -812,7 +866,11 @@ export const ChatPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={sending || !newMessage.trim() || (isFreeExpired && !extendedPaid && isConsumer)}
+            disabled={
+              sending ||
+              !newMessage.trim() ||
+              (isFreeExpired && !extendedPaid && user?.role !== 'SUPER_ADMIN')
+            }
             className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none shadow-xs"
           >
             <Send className="w-4 h-4" />

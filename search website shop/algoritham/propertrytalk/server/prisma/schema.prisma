@@ -587,6 +587,10 @@ model Property {
   city                    String
   countryCode             String   @default("NZ")
   postalCode              String?
+  formattedAddress        String?  // Full normalized address from Google
+  region                  String?  // Administrative area / Region (e.g. Auckland, Canterbury)
+  googlePlaceId           String?  // Google Place ID from Geocoding / Address Validation
+  addressValidationStatus String?  // VERIFIED, NEEDS_CONFIRMATION, UNVERIFIED
   latitude                Float?
   longitude               Float?
   images                  String   // Stored as JSON array string: '["https://..."]'
@@ -603,6 +607,35 @@ model Property {
   remoteViewingAvailable  Boolean  @default(true)
   viewsCount              Int      @default(0)
   
+  // Legal & Title Details (Trade Me style)
+  legalDescription        String?  // e.g. "Lot 14 Deposited Plan 48210"
+  titleReference          String?  // e.g. "NA48C/1124"
+  estateType              String?  // "Fee Simple", "Cross Lease", "Unit Title", "Leasehold"
+  councilName             String?  // e.g. "Auckland Council"
+  districtZoning          String?  // e.g. "Residential - Single House Zone"
+
+  // Council Valuation (CV / RV)
+  capitalValueMinorUnits       Int?
+  landValueMinorUnits          Int?
+  improvementsValueMinorUnits  Int?
+  valuationDate                String?  // e.g. "2024-07-01"
+  valuationSource              String?  // e.g. "Auckland Council Rating Roll"
+
+  // Commercial Property Value Estimate (CoreLogic / QV)
+  estimatedValueMinorUnits     Int?
+  estimatedLowerMinorUnits     Int?
+  estimatedUpperMinorUnits     Int?
+  estimateConfidence           String?  // "HIGH", "MEDIUM", "LOW"
+  estimateDate                 String?  // e.g. "September 2026"
+  estimateSource               String?  // e.g. "CoreLogic"
+
+  // Weekly Rent Estimate (Tenancy Services / CoreLogic)
+  rentWeeklyEstimatedMinorUnits Int?
+  rentWeeklyLowerMinorUnits     Int?
+  rentWeeklyUpperMinorUnits     Int?
+  rentEstimateDate              String?
+  rentEstimateSource            String?
+
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -612,9 +645,65 @@ model Property {
   inquiries               PropertyInquiry[]
   physicalViewingBookings PhysicalViewingBooking[]
   savedByUsers            SavedProperty[]
+  amenityCache            PropertyAmenityCache[]
+  salesHistory            PropertySalesHistory[]
+  insightsCache           PropertyInsightsCache[]
 
   @@index([city, suburb])
   @@index([listingType, propertyType])
+}
+
+model PropertySalesHistory {
+  id              String   @id @default(uuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  saleDate        DateTime
+  priceMinorUnits Int
+  saleType        String?  // e.g. "Residential Freehold Sale", "Private Treaty"
+  createdAt       DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([saleDate])
+}
+
+model PropertyAmenityCache {
+  id               String   @id @default(uuid())
+  propertyId       String
+  category         String   // schools, supermarkets, hospitals, pharmacies, parks, gyms, petrol_stations, cafes, transit
+  placeId          String   // Google Place ID
+  name             String
+  formattedAddress String?
+  distanceMeters   Int?
+  rating           Float?
+  userRatingCount  Int?
+  openNow          Boolean?
+  locationLat      Float?
+  locationLng      Float?
+  fetchedAt        DateTime @default(now())
+  expiresAt        DateTime // Cache TTL
+
+  property         Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, category])
+  @@index([propertyId, expiresAt])
+}
+
+model PropertyInsightsCache {
+  id          String   @id @default(uuid())
+  propertyId  String
+  module      String   // schools, school_zones, linz_legal, council_valuation, hazards, valuation, rent, sales_history, nearby_sales
+  payloadJson String
+  source      String
+  sourceDate  String?
+  status      String   // LIVE, CACHED, UNAVAILABLE, WAITING_FOR_CREDENTIALS
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, module])
+  @@index([propertyId])
+  @@index([expiresAt])
 }
 
 model LiveViewingSession {

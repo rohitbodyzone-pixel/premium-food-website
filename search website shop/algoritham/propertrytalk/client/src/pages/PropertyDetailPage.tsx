@@ -27,6 +27,8 @@ import {
   Eye,
   ExternalLink,
 } from 'lucide-react';
+import { PropertyMap } from '../components/property/PropertyMap';
+import { PropertyInsights } from '../components/property/PropertyInsights';
 
 export const PropertyDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -527,6 +529,34 @@ export const PropertyDetailPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Location & Nearby Section */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-4">
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>Location & Nearby</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {property.formattedAddress || `${property.streetAddress}, ${property.suburb}, ${property.city}`}
+              </p>
+            </div>
+
+            {/* Google Property Map */}
+            <PropertyMap
+              latitude={property.latitude}
+              longitude={property.longitude}
+              address={property.formattedAddress || `${property.streetAddress}, ${property.suburb}, ${property.city}`}
+              title={property.title}
+              heightClass="h-72 sm:h-80"
+              showDirections={true}
+            />
+          </div>
+
+          {/* Trade Me-Equivalent Property Data & Valuation Insights */}
+          <PropertyInsights
+            propertyIdOrSlug={property.slug || property.id}
+          />
         </div>
 
         {/* Right Column: Sticky Contact & Booking Card */}

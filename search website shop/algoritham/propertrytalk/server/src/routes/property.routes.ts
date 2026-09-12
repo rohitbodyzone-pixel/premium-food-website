@@ -1,6 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db/prisma';
 import { requireAuth, optionalAuth } from '../middleware/auth.middleware';
+import { getGooglePropertyProvider } from '../services/google/google-provider.factory';
+import { placesCacheService } from '../services/google/google-places-cache.service';
+import { getValuationProvider, councilValuationService } from '../services/insights/valuation.provider';
+import { nzSchoolService } from '../services/insights/school.service';
+import { councilHazardProvider } from '../services/insights/hazard.service';
+import { nearbySalesService } from '../services/insights/nearby-sales.service';
+import { getLinzPropertyProvider } from '../services/insights/linz.provider';
+import { insightsCacheService } from '../services/insights/insights-cache.service';
+import { TradeMePropertyInsightsResponse, DataSourceInfo } from '../services/insights/insights.interface';
 
 const router = Router();
 
@@ -13,6 +22,70 @@ function slugify(text: string): string {
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
+
+/**
+ * POST /api/properties/validate-address
+ * Validates entered address with Google Address Validation
+ * Never exposes private Google credentials to frontend
+ */
+router.post('/validate-address', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { streetAddress, suburb, city, region, postalCode, countryCode = 'NZ' } = req.body;
+
+    if (!streetAddress || !city) {
+      res.status(400).json({ error: 'Street address and city are required for address validation' });
+      return;
+    }
+
+    const provider = getGooglePropertyProvider();
+    const result = await provider.validateAddress({
+      streetAddress: String(streetAddress).trim(),
+      suburb: suburb ? String(suburb).trim() : undefined,
+      city: String(city).trim(),
+      region: region ? String(region).trim() : undefined,
+      postalCode: postalCode ? String(postalCode).trim() : undefined,
+      countryCode: String(countryCode).trim(),
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error validating property address:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to validate address',
+      status: 'COULD_NOT_VERIFY',
+    });
+  }
+});
+
+/**
+ * POST /api/properties/geocode-address
+ * Authoritative server-side Geocoding for confirmed address
+ */
+router.post('/geocode-address', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { streetAddress, suburb, city, region, postalCode, countryCode = 'NZ' } = req.body;
+
+    if (!streetAddress || !city) {
+      res.status(400).json({ error: 'Street address and city are required for geocoding' });
+      return;
+    }
+
+    const provider = getGooglePropertyProvider();
+    const result = await provider.geocodeAddress({
+      streetAddress: String(streetAddress).trim(),
+      suburb: suburb ? String(suburb).trim() : undefined,
+      city: String(city).trim(),
+      region: region ? String(region).trim() : undefined,
+      postalCode: postalCode ? String(postalCode).trim() : undefined,
+      countryCode: String(countryCode).trim(),
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error geocoding property address:', error);
+    res.status(500).json({ error: error.message || 'Failed to geocode address' });
+  }
+});
 
 // 1. GET /api/properties - Filterable property list with pagination
 router.get('/', optionalAuth, async (req: Request, res: Response) => {
@@ -342,6 +415,535 @@ router.get('/:idOrSlug', optionalAuth, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * 4b. GET /api/properties/:idOrSlug/nearby-amenities
+ * Returns cached or freshly fetched nearby amenities (Schools, Supermarkets, etc.)
+ * Protected by database caching with TTL and Super Admin feature flag
+ */
+router.get('/:idOrSlug/nearby-amenities', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { idOrSlug } = req.params;
+    const { forceRefresh } = req.query;
+
+    // 1. Check feature flag
+    const placesConfig = await prisma.systemConfig.findUnique({
+      where: { key: 'google_places_enabled' },
+    });
+    const isPlacesEnabled = placesConfig ? placesConfig.value === 'true' : true;
+
+    if (!isPlacesEnabled) {
+      res.json({
+        enabled: false,
+        message: 'Nearby amenities feature is currently disabled by administrator.',
+        amenities: [],
+        byCategory: {},
+        categoriesAvailable: [],
+        totalCount: 0,
+      });
+      return;
+    }
+
+    // 2. Find property
+    const property = await prisma.property.findFirst({
+      where: {
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      select: {
+        id: true,
+        latitude: true,
+        longitude: true,
+        streetAddress: true,
+        city: true,
+        countryCode: true,
+      },
+    });
+
+    if (!property) {
+      res.status(404).json({ error: 'Property not found' });
+      return;
+    }
+
+    // 3. Fallback coordinates if property not geocoded yet
+    let lat = property.latitude;
+    let lng = property.longitude;
+
+    if (!lat || !lng) {
+      try {
+        const provider = getGooglePropertyProvider();
+        const geo = await provider.geocodeAddress({
+          streetAddress: property.streetAddress,
+          city: property.city,
+          countryCode: property.countryCode,
+        });
+        lat = geo.latitude;
+        lng = geo.longitude;
+
+        await prisma.property.update({
+          where: { id: property.id },
+          data: {
+            latitude: lat,
+            longitude: lng,
+            googlePlaceId: geo.googlePlaceId,
+            formattedAddress: geo.formattedAddress,
+          },
+        });
+      } catch {
+        res.json({
+          enabled: true,
+          message: 'Property has no verified coordinates to query nearby places.',
+          amenities: [],
+          byCategory: {},
+          categoriesAvailable: [],
+          totalCount: 0,
+        });
+        return;
+      }
+    }
+
+    // 4. Retrieve from cache or query Google Places API
+    const provider = getGooglePropertyProvider();
+    const result = await placesCacheService.getOrFetchAmenities(
+      property.id,
+      { latitude: lat, longitude: lng },
+      provider,
+      { forceRefresh: forceRefresh === 'true' }
+    );
+
+    res.json({
+      enabled: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('Error fetching nearby amenities:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch nearby amenities' });
+  }
+});
+
+/**
+ * 4c. GET /api/properties/:idOrSlug/insights
+ * Returns authoritative Trade Me Property Insights equivalent:
+ * 1. Location & Map coordinates
+ * 2. Property Value Estimate (CoreLogic / QV / Unconfigured fallback)
+ * 3. Weekly Rent Estimate
+ * 4. Gross Rental Yield
+ * 5. Official NZ MoE schools & enrolment zones
+ * 6. Public Sales History records
+ * 7. Capital Value / Council Rateable Value
+ * 8. Nearby Comparable Recent Sales
+ * 9. Legal & Property details (Lot/DP, Title Ref, Estate, Zoning, Council)
+ * 10. Council Flood & Hazard mapping overlays & LIM advisory
+ */
+router.get('/:idOrSlug/insights', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { idOrSlug } = req.params;
+    const forceRefresh = req.query.forceRefresh === 'true';
+
+    // 0. Super Admin Feature Flag check
+    const flagConfigs = await prisma.systemConfig.findMany({
+      where: {
+        key: {
+          in: [
+            'property_insights_enabled',
+            'property_value_enabled',
+            'rent_estimate_enabled',
+            'sales_history_enabled',
+            'nearby_sales_enabled',
+            'school_information_enabled',
+            'school_zones_enabled',
+            'council_valuation_enabled',
+            'legal_property_details_enabled',
+            'property_hazards_enabled',
+          ],
+        },
+      },
+    });
+
+    const flags: Record<string, boolean> = {
+      property_insights_enabled: true,
+      property_value_enabled: true,
+      rent_estimate_enabled: true,
+      sales_history_enabled: true,
+      nearby_sales_enabled: true,
+      school_information_enabled: true,
+      school_zones_enabled: true,
+      council_valuation_enabled: true,
+      legal_property_details_enabled: true,
+      property_hazards_enabled: true,
+    };
+
+    for (const c of flagConfigs) {
+      flags[c.key] = c.value === 'true';
+    }
+
+    if (!flags.property_insights_enabled) {
+      res.json({
+        enabled: false,
+        message: 'Property insights feature is currently disabled by administrator.',
+        propertyId: idOrSlug,
+      });
+      return;
+    }
+
+    // 1. Query property with public sales history
+    const property = await prisma.property.findFirst({
+      where: {
+        OR: [{ id: idOrSlug }, { slug: idOrSlug }],
+      },
+      include: {
+        salesHistory: {
+          orderBy: { saleDate: 'desc' },
+        },
+      },
+    });
+
+    if (!property) {
+      res.status(404).json({ error: 'Property not found' });
+      return;
+    }
+
+    // 2. Latitude & Longitude resolution
+    let lat = property.latitude;
+    let lng = property.longitude;
+
+    if (!lat || !lng) {
+      try {
+        const provider = getGooglePropertyProvider();
+        const geo = await provider.geocodeAddress({
+          streetAddress: property.streetAddress,
+          suburb: property.suburb,
+          city: property.city,
+          countryCode: property.countryCode,
+        });
+        lat = geo.latitude;
+        lng = geo.longitude;
+
+        await prisma.property.update({
+          where: { id: property.id },
+          data: {
+            latitude: lat,
+            longitude: lng,
+            googlePlaceId: geo.googlePlaceId,
+            formattedAddress: geo.formattedAddress,
+          },
+        });
+      } catch {
+        // Continue with null if geocoding fails
+      }
+    }
+
+    const dataSources: DataSourceInfo[] = [];
+
+    // 3. Property Valuation Estimate
+    let valuation: any;
+    if (flags.property_value_enabled) {
+      const cachedVal = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'VALUATION_ESTIMATE') : null;
+      if (cachedVal) {
+        valuation = cachedVal.data;
+        dataSources.push({
+          module: 'Property Value Estimate',
+          source: valuation.source || 'CoreLogic / QV (AVM)',
+          sourceDate: valuation.estimateDate,
+          status: 'CACHED',
+          message: 'Authoritative automated valuation model estimate',
+        });
+      } else {
+        const valuationProvider = getValuationProvider();
+        valuation = await valuationProvider.getValuation(property);
+        await insightsCacheService.set(property.id, 'VALUATION_ESTIMATE', valuation, {
+          source: valuation.source,
+          sourceDate: valuation.estimateDate,
+          status: valuation.available ? 'AVAILABLE' : 'WAITING_FOR_PROVIDER_CREDENTIALS',
+        });
+        dataSources.push({
+          module: 'Property Value Estimate',
+          source: valuation.source || 'CoreLogic / QV (AVM)',
+          sourceDate: valuation.estimateDate,
+          status: valuation.available ? 'LIVE' : 'WAITING_FOR_CREDENTIALS',
+          message: valuation.unavailabilityReason,
+        });
+      }
+    } else {
+      valuation = { available: false, unavailabilityReason: 'Disabled by administrator' };
+      dataSources.push({ module: 'Property Value Estimate', source: 'CoreLogic / QV (AVM)', status: 'DISABLED' });
+    }
+
+    // 4. Weekly Rent Estimate
+    let rental: any;
+    if (flags.rent_estimate_enabled) {
+      const cachedRent = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'RENT_ESTIMATE') : null;
+      if (cachedRent) {
+        rental = cachedRent.data;
+        dataSources.push({
+          module: 'Weekly Rent Estimate',
+          source: rental.source || 'MBIE Tenancy Services',
+          sourceDate: rental.estimateDate,
+          status: 'CACHED',
+          message: rental.label === 'Area Market Rent' ? 'Official MBIE Tenancy Services lodged bond statistics' : 'Property Rental Appraisal',
+        });
+      } else {
+        const valuationProvider = getValuationProvider();
+        rental = await valuationProvider.getRentEstimate(property);
+        await insightsCacheService.set(property.id, 'RENT_ESTIMATE', rental, {
+          source: rental.source,
+          sourceDate: rental.estimateDate,
+          status: rental.available ? 'AVAILABLE' : 'UNAVAILABLE',
+        });
+        dataSources.push({
+          module: 'Weekly Rent Estimate',
+          source: rental.source || 'MBIE Tenancy Services',
+          sourceDate: rental.estimateDate,
+          status: rental.available ? 'LIVE' : 'UNAVAILABLE',
+          message: rental.label === 'Area Market Rent' ? 'Official MBIE Tenancy Services lodged bond statistics' : 'Property Rental Appraisal',
+        });
+      }
+    } else {
+      rental = { available: false, unavailabilityReason: 'Disabled by administrator' };
+      dataSources.push({ module: 'Weekly Rent Estimate', source: 'MBIE Tenancy Services', status: 'DISABLED' });
+    }
+
+    // 5. Gross Rental Yield
+    const valuationProvider = getValuationProvider();
+    const rentalYield = valuationProvider.calculateRentalYield(valuation, rental);
+
+    // 6. Official MoE School Directory & Enrolment Zone Evaluation
+    let schools: any;
+    if (flags.school_information_enabled) {
+      const cachedSchools = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'SCHOOLS') : null;
+      if (cachedSchools) {
+        schools = cachedSchools.data;
+        dataSources.push({
+          module: 'School Information & Zones',
+          source: 'Ministry of Education (MoE)',
+          sourceDate: '2026 Directory',
+          status: 'CACHED',
+          message: 'Official MoE School Directory and zone boundaries',
+        });
+      } else {
+        schools = (lat && lng)
+          ? nzSchoolService.getSchoolsNearProperty(lat, lng)
+          : { totalCount: 0, inZoneCount: 0, schools: [] };
+
+        if (!flags.school_zones_enabled) {
+          schools = {
+            ...schools,
+            inZoneCount: 0,
+            schools: schools.schools.map((s: any) => ({
+              ...s,
+              hasZone: false,
+              zoneStatus: 'NOT_ZONED',
+            })),
+          };
+        }
+
+        await insightsCacheService.set(property.id, 'SCHOOLS', schools, {
+          source: 'Ministry of Education (MoE)',
+          sourceDate: '2026 Directory',
+          status: 'AVAILABLE',
+        });
+        dataSources.push({
+          module: 'School Information & Zones',
+          source: 'Ministry of Education (MoE)',
+          sourceDate: '2026 Directory',
+          status: 'LIVE',
+          message: 'Authoritative MoE School Directory & Enrolment Zone Polygons',
+        });
+      }
+    } else {
+      schools = { totalCount: 0, inZoneCount: 0, schools: [] };
+      dataSources.push({ module: 'School Information & Zones', source: 'Ministry of Education (MoE)', status: 'DISABLED' });
+    }
+
+    // 7. Public Sales History Records
+    let salesHistory: any[] = [];
+    if (flags.sales_history_enabled) {
+      salesHistory = (property.salesHistory || []).map((sh) => {
+        const d = new Date(sh.saleDate);
+        return {
+          id: sh.id,
+          saleDate: d.toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' }),
+          saleYear: d.getFullYear(),
+          priceMinorUnits: sh.priceMinorUnits,
+          priceDisplay: `$${(sh.priceMinorUnits / 100).toLocaleString('en-NZ')}`,
+          saleType: sh.saleType || 'Arms-length sale',
+        };
+      });
+      dataSources.push({
+        module: 'Sales History Records',
+        source: 'NZ Public Property Transfer Register',
+        status: 'LIVE',
+        message: 'Authoritative settled property sale records',
+      });
+    } else {
+      dataSources.push({ module: 'Sales History Records', source: 'NZ Public Property Transfer Register', status: 'DISABLED' });
+    }
+
+    // 8. Council Rateable Valuation (CV, LV, Improvements)
+    let councilValuation: any;
+    if (flags.council_valuation_enabled) {
+      const cachedCV = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'COUNCIL_VALUATION') : null;
+      if (cachedCV) {
+        councilValuation = cachedCV.data;
+        dataSources.push({
+          module: 'Council Rating Valuation',
+          source: councilValuation.valuationSource || 'Council Rating Valuation',
+          sourceDate: councilValuation.valuationDate || undefined,
+          status: 'CACHED',
+        });
+      } else {
+        councilValuation = councilValuationService.getCouncilValuation(property);
+        await insightsCacheService.set(property.id, 'COUNCIL_VALUATION', councilValuation, {
+          source: councilValuation.valuationSource,
+          sourceDate: councilValuation.valuationDate || undefined,
+          status: councilValuation.capitalValueMinorUnits ? 'AVAILABLE' : 'UNAVAILABLE',
+        });
+        dataSources.push({
+          module: 'Council Rating Valuation',
+          source: councilValuation.valuationSource || 'Council Rating Valuation',
+          sourceDate: councilValuation.valuationDate || undefined,
+          status: 'LIVE',
+        });
+      }
+    } else {
+      councilValuation = { valuationSource: 'Disabled by administrator' };
+      dataSources.push({ module: 'Council Rating Valuation', source: 'Council Rating Roll', status: 'DISABLED' });
+    }
+
+    // 9. Nearby Comparable Recent Sales
+    let nearbySales: any[] = [];
+    if (flags.nearby_sales_enabled) {
+      const cachedNearby = !forceRefresh ? await insightsCacheService.get<any[]>(property.id, 'NEARBY_SALES') : null;
+      if (cachedNearby) {
+        nearbySales = cachedNearby.data;
+        dataSources.push({
+          module: 'Nearby Comparable Sales',
+          source: 'Authoritative NZ Public Transfer Records',
+          status: 'CACHED',
+        });
+      } else {
+        nearbySales = await nearbySalesService.getNearbyRecentSales(
+          property.id,
+          lat || -36.85,
+          lng || 174.75,
+          property.city,
+          property.suburb
+        );
+        await insightsCacheService.set(property.id, 'NEARBY_SALES', nearbySales, {
+          source: 'Authoritative NZ Public Transfer Records',
+          status: nearbySales.length > 0 ? 'AVAILABLE' : 'NO_DATA',
+        });
+        dataSources.push({
+          module: 'Nearby Comparable Sales',
+          source: 'Authoritative NZ Public Transfer Records',
+          status: 'LIVE',
+        });
+      }
+    } else {
+      dataSources.push({ module: 'Nearby Comparable Sales', source: 'NZ Public Transfer Records', status: 'DISABLED' });
+    }
+
+    // 10. Legal & Property Details (LINZ Primary Parcels / Titles)
+    let legalDetails: any;
+    if (flags.legal_property_details_enabled) {
+      const cachedLegal = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'LINZ_LEGAL') : null;
+      if (cachedLegal) {
+        legalDetails = cachedLegal.data;
+        dataSources.push({
+          module: 'Legal & Property Details',
+          source: legalDetails.source || 'Land Information New Zealand (LINZ)',
+          status: 'CACHED',
+        });
+      } else {
+        const linzProvider = getLinzPropertyProvider();
+        const linzResult = await linzProvider.getPropertyLegalDetails({
+          ...property,
+          latitude: lat,
+          longitude: lng,
+        });
+        const isWaiting = linzResult.status === 'WAITING_FOR_CREDENTIALS';
+        const isLive = linzResult.status === 'LIVE' || linzResult.status === 'CACHED';
+        legalDetails = {
+          available: linzResult.available,
+          ...linzResult.data,
+          status: isLive ? 'LIVE' : isWaiting ? 'WAITING_FOR_PROVIDER_CREDENTIALS' : 'UNAVAILABLE',
+          unavailabilityReason: linzResult.message,
+        };
+        await insightsCacheService.set(property.id, 'LINZ_LEGAL', legalDetails, {
+          source: legalDetails.source,
+          status: linzResult.status,
+        });
+        dataSources.push({
+          module: 'Legal & Property Details',
+          source: legalDetails.source || 'Land Information New Zealand (LINZ)',
+          status: isLive ? 'LIVE' : isWaiting ? 'WAITING_FOR_CREDENTIALS' : 'UNAVAILABLE',
+          message: linzResult.message,
+        });
+      }
+    } else {
+      legalDetails = { source: 'Disabled by administrator' };
+      dataSources.push({ module: 'Legal & Property Details', source: 'Land Information New Zealand (LINZ)', status: 'DISABLED' });
+    }
+
+    // 11. Council Flood & Hazard Mapping Overlays
+    let hazards: any;
+    if (flags.property_hazards_enabled) {
+      const cachedHazards = !forceRefresh ? await insightsCacheService.get<any>(property.id, 'HAZARDS') : null;
+      if (cachedHazards) {
+        hazards = cachedHazards.data;
+        dataSources.push({
+          module: 'Council Hazard & Flood Overlay',
+          source: `${hazards.councilName} Open GIS Portal`,
+          status: 'CACHED',
+        });
+      } else {
+        hazards = councilHazardProvider.getHazardData({
+          streetAddress: property.streetAddress,
+          suburb: property.suburb,
+          city: property.city,
+          region: property.region || undefined,
+          latitude: lat,
+          longitude: lng,
+        });
+        await insightsCacheService.set(property.id, 'HAZARDS', hazards, {
+          source: `${hazards.councilName} Open GIS Portal`,
+          status: hazards.status,
+        });
+        dataSources.push({
+          module: 'Council Hazard & Flood Overlay',
+          source: `${hazards.councilName} Open GIS Portal`,
+          status: hazards.status === 'PROVIDER_UNAVAILABLE' ? 'UNAVAILABLE' : 'LIVE',
+        });
+      }
+    } else {
+      hazards = {
+        isHazardDataAvailable: false,
+        councilName: property.city,
+        overlays: [],
+        limNotice: 'Absence of mapped hazard data does not imply absence of risk. Consult a Land Information Memorandum (LIM) or Council GIS.',
+      };
+      dataSources.push({ module: 'Council Hazard & Flood Overlay', source: 'Council Open GIS', status: 'DISABLED' });
+    }
+
+    const responseData: TradeMePropertyInsightsResponse = {
+      propertyId: property.id,
+      valuation,
+      rental,
+      rentalYield,
+      councilValuation,
+      schools,
+      salesHistory,
+      nearbySales,
+      legalDetails,
+      hazards,
+      dataSources,
+    };
+
+    res.json(responseData);
+  } catch (error: any) {
+    console.error('Error fetching property insights:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch property insights' });
+  }
+});
+
 // 5. POST /api/properties - Create property listing
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -406,6 +1008,34 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       privateOwnerId = user.id;
     }
 
+    let resolvedLat = latitude ? parseFloat(String(latitude)) : null;
+    let resolvedLng = longitude ? parseFloat(String(longitude)) : null;
+    let resolvedPlaceId = req.body.googlePlaceId ? String(req.body.googlePlaceId).trim() : null;
+    let resolvedFormatted = req.body.formattedAddress ? String(req.body.formattedAddress).trim() : null;
+    let resolvedRegion = req.body.region ? String(req.body.region).trim() : null;
+    let resolvedValidationStatus = req.body.addressValidationStatus ? String(req.body.addressValidationStatus).trim() : null;
+
+    // Authoritative server-side geocode if coordinates not supplied
+    if (resolvedLat === null || resolvedLng === null) {
+      try {
+        const provider = getGooglePropertyProvider();
+        const geo = await provider.geocodeAddress({
+          streetAddress: streetAddress.trim(),
+          suburb: suburb.trim(),
+          city: city.trim(),
+          countryCode: countryCode.toUpperCase(),
+        });
+        resolvedLat = geo.latitude;
+        resolvedLng = geo.longitude;
+        if (!resolvedPlaceId) resolvedPlaceId = geo.googlePlaceId;
+        if (!resolvedFormatted) resolvedFormatted = geo.formattedAddress;
+        if (!resolvedRegion) resolvedRegion = geo.region;
+        if (!resolvedValidationStatus) resolvedValidationStatus = 'VERIFIED';
+      } catch (e: any) {
+        console.warn('[PropertyRoutes] Server auto-geocode fallback warning:', e.message);
+      }
+    }
+
     const baseSlug = slugify(`${streetAddress}-${suburb}-${city}`);
     const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
 
@@ -428,8 +1058,12 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         city: city.trim(),
         countryCode: countryCode.toUpperCase(),
         postalCode: postalCode ? postalCode.trim() : null,
-        latitude: latitude ? parseFloat(String(latitude)) : null,
-        longitude: longitude ? parseFloat(String(longitude)) : null,
+        formattedAddress: resolvedFormatted,
+        region: resolvedRegion,
+        googlePlaceId: resolvedPlaceId,
+        addressValidationStatus: resolvedValidationStatus,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         images: JSON.stringify(images),
         videoUrl: videoUrl ? videoUrl.trim() : null,
         documents: JSON.stringify(documents),
@@ -442,6 +1076,18 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         remoteViewingAvailable: !!remoteViewingAvailable,
       },
     });
+
+    // Asynchronously pre-cache nearby places if coordinates are present
+    if (property.latitude && property.longitude) {
+      const provider = getGooglePropertyProvider();
+      placesCacheService
+        .getOrFetchAmenities(
+          property.id,
+          { latitude: property.latitude, longitude: property.longitude },
+          provider
+        )
+        .catch(() => {});
+    }
 
     res.status(201).json(property);
   } catch (error) {
@@ -514,6 +1160,12 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
     if (streetAddress) data.streetAddress = streetAddress.trim();
     if (suburb) data.suburb = suburb.trim();
     if (city) data.city = city.trim();
+    if (req.body.formattedAddress !== undefined) data.formattedAddress = req.body.formattedAddress ? String(req.body.formattedAddress).trim() : null;
+    if (req.body.region !== undefined) data.region = req.body.region ? String(req.body.region).trim() : null;
+    if (req.body.googlePlaceId !== undefined) data.googlePlaceId = req.body.googlePlaceId ? String(req.body.googlePlaceId).trim() : null;
+    if (req.body.addressValidationStatus !== undefined) data.addressValidationStatus = req.body.addressValidationStatus ? String(req.body.addressValidationStatus).trim() : null;
+    if (req.body.latitude !== undefined) data.latitude = req.body.latitude ? parseFloat(String(req.body.latitude)) : null;
+    if (req.body.longitude !== undefined) data.longitude = req.body.longitude ? parseFloat(String(req.body.longitude)) : null;
     if (images !== undefined) data.images = JSON.stringify(images);
     if (videoUrl !== undefined) data.videoUrl = videoUrl ? videoUrl.trim() : null;
     if (documents !== undefined) data.documents = JSON.stringify(documents);
@@ -524,6 +1176,11 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       where: { id },
       data,
     });
+
+    // Invalidate cached LINZ / Insights if coordinates or address changed
+    if (data.latitude !== undefined || data.longitude !== undefined || data.streetAddress !== undefined) {
+      await insightsCacheService.invalidate(id, 'LINZ_LEGAL');
+    }
 
     res.json(updated);
   } catch (error) {

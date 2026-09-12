@@ -49,6 +49,8 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState<string>('');
   const [quoteDetails, setQuoteDetails] = useState<any>(null);
@@ -134,8 +136,14 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
   const handleFinalConfirm = async () => {
     if (confirming) return;
     setConfirming(true);
+    setPaymentStatus('pending');
+    setErrorMessage(null);
     try {
       await onConfirm(selectedMethodId || undefined);
+      setPaymentStatus('success');
+    } catch (err: any) {
+      setPaymentStatus('failed');
+      setErrorMessage(err.message || 'Payment failed. Please verify your card details or try another card.');
     } finally {
       setConfirming(false);
     }
@@ -410,6 +418,14 @@ export const PaidContinuationModal: React.FC<PaidContinuationModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Error Message Display */}
+              {errorMessage && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
 
               {/* Confirmation Button */}
               <div className="space-y-2">

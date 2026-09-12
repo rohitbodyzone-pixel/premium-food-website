@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 
 const SOURCE_DIR = path.resolve(__dirname, '..');
 const BACKUP_ROOT = path.resolve('C:/Users/ASUS 1/OneDrive/Desktop/Cafe-Click-Collect/backups');
-const BACKUP_NAME = 'propertytalk_stable_checkpoint_2026-09-06';
+const BACKUP_NAME = 'propertytalk_stable_checkpoint_2026-09-12';
 const TARGET_DIR = path.join(BACKUP_ROOT, BACKUP_NAME);
 const TARGET_ZIP = path.join(BACKUP_ROOT, `${BACKUP_NAME}.zip`);
 
@@ -87,9 +87,9 @@ const stats = countFiles(TARGET_DIR);
 const manifest = {
   backupName: BACKUP_NAME,
   timestamp: new Date().toISOString(),
-  localTime: '2026-09-06T15:14:00+12:00',
-  description: 'PropertyTalk Stable Checkpoint (Phase 2D Phone Auth + Chat Consultation Flow Verified)',
-  gitCommit: '2e39305',
+  localTime: '2026-09-12T15:07:00+12:00',
+  description: 'PropertyTalk Stable Checkpoint (Real LINZ Cadastre + 437/437 Tests Passed + Customer/Expert/Admin Multi-Portal Builds Pass)',
+  gitCommit: '1cdd17b',
   gitRemote: 'https://github.com/rohitbodyzone-pixel/premium-food-website.git',
   totalFiles: stats.count,
   totalSizeBytes: stats.size,
@@ -104,8 +104,8 @@ const manifest = {
     note: 'Includes local environment secrets strictly for laptop recovery. Excluded from GitHub.',
   },
   testVerification: {
-    totalSuites: 7,
-    testsPassed: 214,
+    totalSuites: 16,
+    testsPassed: 437,
     testsFailed: 0,
     status: 'ALL_PASSED',
   },

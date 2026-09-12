@@ -144,8 +144,16 @@ export function setupSocketServer(io: Server) {
       const chatId = typeof data === 'string' ? data : data.chatId;
       const paymentMethodId = typeof data === 'object' ? data.paymentMethodId : undefined;
       try {
+        io.to(`consultation_${chatId}`).to(`chat_${chatId}`).emit('chat:payment_pending', {
+          chatId,
+          status: 'PAYMENT_PENDING',
+        });
         await chatTimerService.confirmPaidContinuation(chatId, user.id, paymentMethodId);
       } catch (err: any) {
+        io.to(`consultation_${chatId}`).to(`chat_${chatId}`).emit('chat:payment_error', {
+          chatId,
+          message: err.message || 'Paid continuation failed',
+        });
         socket.emit('chat:payment_error', { message: err.message || 'Paid continuation failed' });
       }
     });
@@ -156,8 +164,16 @@ export function setupSocketServer(io: Server) {
       const callSessionId = typeof data === 'string' ? data : data.callSessionId;
       const paymentMethodId = typeof data === 'object' ? data.paymentMethodId : undefined;
       try {
+        io.to(`call_${callSessionId}`).emit('call:payment_pending', {
+          callSessionId,
+          status: 'PAYMENT_PENDING',
+        });
         await callTimerService.confirmPaidContinuation(callSessionId, user.id, paymentMethodId);
       } catch (err: any) {
+        io.to(`call_${callSessionId}`).emit('call:payment_error', {
+          callSessionId,
+          message: err.message || 'Paid continuation failed',
+        });
         socket.emit('call:payment_error', { message: err.message || 'Paid continuation failed' });
       }
     });
@@ -182,7 +198,7 @@ export function setupSocketServer(io: Server) {
           user.role === 'SUPER_ADMIN';
         if (!isParticipant) return;
 
-        // State Machine Check: Expert CANNOT reply until accepted!
+        // State Machine Check: Neither party can send messages before acceptance!
         if (chat.status === 'REQUESTED') {
           if (chat.expert.userId === user.id) {
             socket.emit('chat:error', {
@@ -190,6 +206,10 @@ export function setupSocketServer(io: Server) {
             });
             return;
           }
+          socket.emit('chat:error', {
+            message: 'Please wait for the expert to accept your consultation request before sending messages.',
+          });
+          return;
         } else if (
           chat.status === 'DECLINED' ||
           chat.status === 'CANCELLED' ||
@@ -202,12 +222,12 @@ export function setupSocketServer(io: Server) {
           return;
         }
 
-        // Prevent free-time abuse: block consumer messages when 1 minute expired without paid confirmation
-        if (chat.consumerId === user.id && (chat.status === 'CONNECTED' || chat.status === 'ACTIVE')) {
+        // Prevent free-time abuse: block BOTH consumer and expert messages when free expired without paid confirmation
+        if (chat.status === 'CONNECTED' || chat.status === 'ACTIVE' || chat.status === 'EXPIRED_FREE') {
           const timer = await chatTimerService.startChatTimer(chatId);
-          if (timer.isFreeExpired && !timer.extendedPaid) {
+          if (timer.isFreeExpired && !timer.extendedPaid && user.role !== 'SUPER_ADMIN') {
             socket.emit('chat:error', {
-              message: 'Free consultation minute has ended. Please choose an option to continue.',
+              message: 'Free consultation minute has ended. Please confirm paid continuation to continue messaging.',
               isFreeExpired: true,
             });
             return;

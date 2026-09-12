@@ -38,6 +38,34 @@ router.post('/request', requireAuth, callRequestRateLimiter, async (req: Request
       return;
     }
 
+    // 1. Status verification: Cannot initiate calls before expert acceptance
+    if (chat.status === 'REQUESTED') {
+      res.status(403).json({
+        error: 'Cannot initiate a call before the expert accepts the consultation request.',
+      });
+      return;
+    }
+
+    // 2. Terminal state check
+    if (['DECLINED', 'CANCELLED', 'MISSED', 'ENDED'].includes(chat.status)) {
+      res.status(400).json({
+        error: `Cannot initiate a call in a consultation that is ${chat.status.toLowerCase()}.`,
+      });
+      return;
+    }
+
+    // 3. Free expiration check: If free time has expired and not paid, block call initiation!
+    const chatTimerCheck = chatTimerService.getTimerState(chat.id);
+    const freeExpired = chat.isFreeExpired || (chatTimerCheck?.isFreeExpired ?? false);
+    const extendedPaid = chat.extendedPaid || (chatTimerCheck?.extendedPaid ?? false);
+    if (freeExpired && !extendedPaid) {
+      res.status(403).json({
+        error: 'Free introductory consultation has concluded. Please confirm paid continuation to initiate calls.',
+        isFreeExpired: true,
+      });
+      return;
+    }
+
     // Presence & Availability Validation (Busy check)
     // Pass chatId and consumerId to permit same-consultation upgrade!
     const eligibility = await presenceService.canExpertAcceptCall(chat.expertId, {

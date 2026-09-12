@@ -559,6 +559,9 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
+        billingSession: {
+          include: { transaction: true },
+        },
       },
     });
 
@@ -659,12 +662,14 @@ router.post('/:id/messages', requireAuth, async (req: Request, res: Response) =>
     }
 
     // Role and status checks:
-    // Before acceptance: Expert CANNOT reply until accepted!
+    // Before acceptance: Neither party can send messages in REQUESTED state (expert hasn't accepted yet)
     if (chat.status === 'REQUESTED') {
       if (chat.expert.userId === senderId) {
         res.status(403).json({ error: 'Please accept the consultation request before sending messages.' });
         return;
       }
+      res.status(403).json({ error: 'Please wait for the expert to accept your consultation request before sending messages.' });
+      return;
     } else if (
       chat.status === 'DECLINED' ||
       chat.status === 'CANCELLED' ||
@@ -675,10 +680,10 @@ router.post('/:id/messages', requireAuth, async (req: Request, res: Response) =>
       return;
     }
 
-    // Check free chat timer expiration for consumers
-    if (chat.consumerId === senderId && isChatConnected(chat.status)) {
+    // Check free chat timer expiration for both consumers and experts
+    if (isChatConnected(chat.status) || chat.status === 'EXPIRED_FREE') {
       const timerState = await chatTimerService.startChatTimer(id);
-      if (timerState.isFreeExpired && !timerState.extendedPaid) {
+      if (timerState.isFreeExpired && !timerState.extendedPaid && req.user!.role !== 'SUPER_ADMIN') {
         res.status(403).json({
           error: 'Free consultation minute has ended. Please confirm paid continuation to continue messaging.',
           isFreeExpired: true,

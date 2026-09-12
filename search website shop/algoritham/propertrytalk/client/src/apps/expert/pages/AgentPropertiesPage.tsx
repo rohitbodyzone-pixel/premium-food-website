@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Property } from '../../../types';
+import { Property, AddressValidationResult } from '../../../types';
 import { api } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { PropertyMap } from '../../../components/property/PropertyMap';
 import {
   Building2,
   Plus,
   Edit,
   Trash2,
   CheckCircle2,
+  AlertTriangle,
+  HelpCircle,
+  RefreshCw,
+  Sparkles,
   Video,
   Eye,
   MapPin,
@@ -30,6 +35,8 @@ export const AgentPropertiesPage: React.FC = () => {
   const [streetAddress, setStreetAddress] = useState('');
   const [suburb, setSuburb] = useState('');
   const [city, setCity] = useState('Auckland');
+  const [region, setRegion] = useState('Auckland');
+  const [postalCode, setPostalCode] = useState('');
   const [listingType, setListingType] = useState<'FOR_SALE' | 'FOR_RENT'>('FOR_SALE');
   const [propertyType, setPropertyType] = useState('HOUSE');
   const [priceMinorUnits, setPriceMinorUnits] = useState('1250000');
@@ -41,6 +48,15 @@ export const AgentPropertiesPage: React.FC = () => {
   const [description, setDescription] = useState('');
   const [remoteViewingAvailable, setRemoteViewingAvailable] = useState(true);
   const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1200&q=80');
+
+  // Address Validation & Geocoding State
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<AddressValidationResult | null>(null);
+  const [validationStatus, setValidationStatus] = useState<'VERIFIED' | 'NEEDS_CONFIRMATION' | 'COULD_NOT_VERIFY' | null>(null);
+  const [validatedCoords, setValidatedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [validatedFormattedAddress, setValidatedFormattedAddress] = useState('');
+  const [validatedPlaceId, setValidatedPlaceId] = useState('');
+  const [showCorrectionBanner, setShowCorrectionBanner] = useState(false);
 
   const loadProperties = async () => {
     if (!user?.expertProfile?.id) return;
@@ -59,6 +75,74 @@ export const AgentPropertiesPage: React.FC = () => {
     loadProperties();
   }, [user]);
 
+  const handleValidateAddress = async () => {
+    if (!streetAddress || !city) {
+      alert('Please enter at least a street address and city before validating.');
+      return;
+    }
+    try {
+      setValidating(true);
+      const res = await api.post<{ success: boolean; result: AddressValidationResult }>('/properties/validate-address', {
+        streetAddress,
+        suburb,
+        city,
+        region,
+        postalCode,
+        country: 'NZ',
+      });
+
+      if (res.result) {
+        setValidationResult(res.result);
+        setValidationStatus(res.result.status);
+        if (res.result.formattedAddress) {
+          setValidatedFormattedAddress(res.result.formattedAddress);
+        }
+        if (res.result.latitude && res.result.longitude) {
+          setValidatedCoords({ lat: res.result.latitude, lng: res.result.longitude });
+        }
+        if (res.result.googlePlaceId) {
+          setValidatedPlaceId(res.result.googlePlaceId);
+        }
+        if (res.result.hasCorrections || res.result.status === 'NEEDS_CONFIRMATION') {
+          setShowCorrectionBanner(true);
+        } else {
+          setShowCorrectionBanner(false);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to validate address:', err);
+      setValidationStatus('COULD_NOT_VERIFY');
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleApplyCorrections = () => {
+    if (!validationResult) return;
+    const comps = validationResult.addressComponents;
+    if (comps) {
+      if (comps.streetNumber && comps.route) {
+        setStreetAddress(`${comps.streetNumber} ${comps.route}`);
+      }
+      if (comps.suburb) setSuburb(comps.suburb);
+      if (comps.city) setCity(comps.city);
+      if (comps.region) setRegion(comps.region);
+      if (comps.postalCode) setPostalCode(comps.postalCode);
+    } else {
+      if (validationResult.streetAddress) setStreetAddress(validationResult.streetAddress);
+      if (validationResult.suburb) setSuburb(validationResult.suburb);
+      if (validationResult.city) setCity(validationResult.city);
+      if (validationResult.region) setRegion(validationResult.region);
+      if (validationResult.postalCode) setPostalCode(validationResult.postalCode);
+    }
+    setShowCorrectionBanner(false);
+    setValidationStatus('VERIFIED');
+  };
+
+  const handleDismissCorrections = () => {
+    setShowCorrectionBanner(false);
+  };
+
   const handleCreateProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -68,6 +152,8 @@ export const AgentPropertiesPage: React.FC = () => {
         streetAddress,
         suburb,
         city,
+        region: region || undefined,
+        postalCode: postalCode || undefined,
         listingType,
         propertyType,
         priceMinorUnits: Number(priceMinorUnits) * 100,
@@ -79,6 +165,11 @@ export const AgentPropertiesPage: React.FC = () => {
         description,
         remoteViewingAvailable,
         images: [imageUrl],
+        latitude: validatedCoords?.lat,
+        longitude: validatedCoords?.lng,
+        googlePlaceId: validatedPlaceId || undefined,
+        formattedAddress: validatedFormattedAddress || undefined,
+        addressValidationStatus: validationStatus || 'COULD_NOT_VERIFY',
       });
       setIsCreateModalOpen(false);
       resetForm();
@@ -95,7 +186,16 @@ export const AgentPropertiesPage: React.FC = () => {
     setTitle('');
     setStreetAddress('');
     setSuburb('');
+    setCity('Auckland');
+    setRegion('Auckland');
+    setPostalCode('');
     setDescription('');
+    setValidationResult(null);
+    setValidationStatus(null);
+    setValidatedCoords(null);
+    setValidatedFormattedAddress('');
+    setValidatedPlaceId('');
+    setShowCorrectionBanner(false);
   };
 
   const handleStatusChange = async (propertyId: string, status: string) => {
@@ -292,39 +392,189 @@ export const AgentPropertiesPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-1">
-                  <label className="block font-semibold text-slate-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    required
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
+              {/* Address Fields */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-600" />
+                    Property Address (New Zealand)
+                  </span>
+                  {validationStatus === 'VERIFIED' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      <CheckCircle2 className="w-3 h-3" /> Address Verified
+                    </span>
+                  )}
+                  {validationStatus === 'NEEDS_CONFIRMATION' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                      <AlertTriangle className="w-3 h-3" /> Needs Review
+                    </span>
+                  )}
+                  {validationStatus === 'COULD_NOT_VERIFY' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                      <HelpCircle className="w-3 h-3" /> Unverified
+                    </span>
+                  )}
                 </div>
-                <div className="col-span-1">
-                  <label className="block font-semibold text-slate-700 mb-1">Suburb</label>
-                  <input
-                    type="text"
-                    required
-                    value={suburb}
-                    onChange={(e) => setSuburb(e.target.value)}
-                    placeholder="e.g. Ponsonby"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
-                </div>
-                <div className="col-span-1">
+
+                <div>
                   <label className="block font-semibold text-slate-700 mb-1">Street Address</label>
                   <input
                     type="text"
                     required
                     value={streetAddress}
-                    onChange={(e) => setStreetAddress(e.target.value)}
+                    onChange={(e) => {
+                      setStreetAddress(e.target.value);
+                      setValidationStatus(null);
+                    }}
                     placeholder="e.g. 14 Hamilton Road"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
                   />
                 </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Suburb</label>
+                    <input
+                      type="text"
+                      required
+                      value={suburb}
+                      onChange={(e) => {
+                        setSuburb(e.target.value);
+                        setValidationStatus(null);
+                      }}
+                      placeholder="e.g. Ponsonby"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">City</label>
+                    <input
+                      type="text"
+                      required
+                      value={city}
+                      onChange={(e) => {
+                        setCity(e.target.value);
+                        setValidationStatus(null);
+                      }}
+                      placeholder="e.g. Auckland"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Region</label>
+                    <input
+                      type="text"
+                      value={region}
+                      onChange={(e) => setRegion(e.target.value)}
+                      placeholder="e.g. Auckland"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Postal Code</label>
+                    <input
+                      type="text"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                      placeholder="e.g. 1011"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Validate Address Action */}
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-[11px] text-slate-500">
+                    Verify against Google Address Validation to get authoritative coordinates and nearby amenities.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={validating || !streetAddress || !city}
+                    onClick={handleValidateAddress}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold text-xs rounded-xl shadow-xs transition"
+                  >
+                    {validating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Validating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Validate Address</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Google Correction Suggestion Banner */}
+                {showCorrectionBanner && validationResult && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-amber-900">Google suggested corrections:</p>
+                          <p className="text-amber-800 font-medium mt-0.5">
+                            {validationResult.formattedAddress}
+                          </p>
+                          {validationResult.correctedFields && validationResult.correctedFields.length > 0 && (
+                            <ul className="mt-1.5 space-y-0.5 text-[11px] text-amber-700">
+                              {validationResult.correctedFields.map((cf, i) => (
+                                <li key={i}>
+                                  <span className="font-bold capitalize">{cf.field}:</span>{' '}
+                                  <span className="line-through text-slate-500">{cf.original || '(empty)'}</span> →{' '}
+                                  <span className="font-semibold text-emerald-800">{cf.suggested || cf.corrected}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-amber-200/60">
+                      <button
+                        type="button"
+                        onClick={handleApplyCorrections}
+                        className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-lg shadow-xs transition"
+                      >
+                        Accept Suggested Address
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDismissCorrections}
+                        className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 transition"
+                      >
+                        Keep Original
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Map Location Preview */}
+                {validatedCoords && (
+                  <div className="mt-2 pt-2 border-t border-slate-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-[11px] text-slate-700 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-emerald-600" />
+                        Location Map Preview ({validatedCoords.lat.toFixed(4)}, {validatedCoords.lng.toFixed(4)})
+                      </span>
+                      {validationResult?.geocodeGranularity && (
+                        <span className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {validationResult.geocodeGranularity}
+                        </span>
+                      )}
+                    </div>
+                    <PropertyMap
+                      latitude={validatedCoords.lat}
+                      longitude={validatedCoords.lng}
+                      address={validatedFormattedAddress || `${streetAddress}, ${suburb}, ${city}`}
+                      title={title || 'Listing Preview'}
+                      heightClass="h-44"
+                      showDirections={false}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">

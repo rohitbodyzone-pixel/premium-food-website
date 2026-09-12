@@ -11,6 +11,10 @@ import { runPhase3ATwilioTests } from './phase3a_twilio.test';
 import { runStripeRegressionTests } from './stripe-regression.test';
 import { runPushRegressionTests } from './push-regression.test';
 import { runProductStructureTests } from './product-structure.test';
+import { runPhase4aGooglePropertyTests } from './phase4a-google-property.test';
+import { runTradeMeInsightsTests } from './trade-me-insights.test';
+import { runAuthoritativeDataTests } from './authoritative-data.test';
+import { runLinzAuthoritativeTests } from './linz-authoritative.test';
 import { resetEmailProviderForTesting } from '../src/services/email/email-provider.factory';
 import { resetSmsProviderForTesting } from '../src/services/sms/sms-provider.factory';
 import { resetPaymentProviderForTesting } from '../src/services/payment/payment-provider.factory';
@@ -96,6 +100,22 @@ async function main() {
     const res12 = await runProductStructureTests();
     totalPassed += res12.passed;
     totalFailed += res12.failed;
+
+    const res13 = await runPhase4aGooglePropertyTests();
+    totalPassed += res13.passed;
+    totalFailed += res13.failed;
+
+    const res14 = await runTradeMeInsightsTests();
+    totalPassed += res14.passed;
+    totalFailed += res14.failed;
+
+    const res15 = await runAuthoritativeDataTests();
+    totalPassed += res15.passed;
+    totalFailed += res15.failed;
+
+    const res16 = await runLinzAuthoritativeTests();
+    totalPassed += res16.passed;
+    totalFailed += res16.failed;
 
     console.log('====================================================');
     console.log(`  ALL TEST SUITES FINISHED`);

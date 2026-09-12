@@ -1389,6 +1389,18 @@ router.get('/feature-flags', async (_req: Request, res: Response) => {
             'remote_live_viewing_enabled',
             'agent_mini_websites_enabled',
             'ai_seo_articles_enabled',
+            'google_maps_enabled',
+            'google_places_enabled',
+            'property_insights_enabled',
+            'property_value_enabled',
+            'rent_estimate_enabled',
+            'sales_history_enabled',
+            'nearby_sales_enabled',
+            'school_information_enabled',
+            'school_zones_enabled',
+            'council_valuation_enabled',
+            'legal_property_details_enabled',
+            'property_hazards_enabled',
             'free_call_duration_seconds',
           ],
         },
@@ -1400,19 +1412,67 @@ router.get('/feature-flags', async (_req: Request, res: Response) => {
       remote_live_viewing_enabled: true,
       agent_mini_websites_enabled: true,
       ai_seo_articles_enabled: true,
+      google_maps_enabled: true,
+      google_places_enabled: true,
+      property_insights_enabled: true,
+      property_value_enabled: true,
+      rent_estimate_enabled: true,
+      sales_history_enabled: true,
+      nearby_sales_enabled: true,
+      school_information_enabled: true,
+      school_zones_enabled: true,
+      council_valuation_enabled: true,
+      legal_property_details_enabled: true,
+      property_hazards_enabled: true,
     };
 
     for (const c of configs) {
-      if (c.key === 'australia_enabled') flags.australia_enabled = c.value === 'true';
-      if (c.key === 'remote_live_viewing_enabled') flags.remote_live_viewing_enabled = c.value === 'true';
-      if (c.key === 'agent_mini_websites_enabled') flags.agent_mini_websites_enabled = c.value === 'true';
-      if (c.key === 'ai_seo_articles_enabled') flags.ai_seo_articles_enabled = c.value === 'true';
+      if (c.key in flags) {
+        flags[c.key] = c.value === 'true';
+      }
     }
 
     res.json(flags);
   } catch (error) {
     console.error('Error fetching feature flags:', error);
     res.status(500).json({ error: 'Failed to fetch feature flags' });
+  }
+});
+
+router.put('/feature-flags', async (req: Request, res: Response) => {
+  try {
+    const { flags } = req.body;
+    if (!flags || typeof flags !== 'object') {
+      return res.status(400).json({ error: 'Flags object is required' });
+    }
+
+    const updates = [];
+    for (const [key, value] of Object.entries(flags)) {
+      const valStr = value === true || value === 'true' ? 'true' : 'false';
+      updates.push(
+        prisma.systemConfig.upsert({
+          where: { key },
+          update: { value: valStr },
+          create: {
+            key,
+            value: valStr,
+            description: `Platform feature toggle for ${key}`,
+          },
+        })
+      );
+      if (key === 'australia_enabled') {
+        await prisma.country.updateMany({
+          where: { code: 'AU' },
+          data: { isActive: valStr === 'true' },
+        });
+      }
+    }
+    await Promise.all(updates);
+
+    res.json({ success: true, count: Object.keys(flags).length });
+  } catch (error) {
+    console.error('Error updating feature flags in batch:', error);
+    res.status(500).json({ error: 'Failed to update feature flags' });
   }
 });
 

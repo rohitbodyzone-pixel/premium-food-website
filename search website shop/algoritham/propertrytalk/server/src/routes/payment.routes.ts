@@ -3,6 +3,7 @@ import { prisma } from '../db/prisma';
 import { requireAuth } from '../middleware/auth.middleware';
 import { getPaymentProvider } from '../services/payment/payment-provider.factory';
 import { billingService } from '../services/billing.service';
+import { chatTimerService } from '../services/chat-timer.service';
 
 const router = Router();
 
@@ -279,7 +280,7 @@ router.post('/consultations/:id/confirm-paid', async (req: Request, res: Respons
 router.post('/consultations/:id/create-payment-intent', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { type = 'VIDEO', confirmed } = req.body;
+    const { type = 'CHAT', confirmed } = req.body;
     const consumerId = req.user!.id;
 
     if (!confirmed) {
@@ -287,19 +288,73 @@ router.post('/consultations/:id/create-payment-intent', async (req: Request, res
       return;
     }
 
-    // 1. Fetch server-calculated quote based on expert rates
+    // 1. Check if chat is already paid/active
+    if (type === 'CHAT') {
+      const chat = await prisma.consultationChat.findUnique({ where: { id } });
+      if (chat && chat.extendedPaid && chat.status === 'PAID_ACTIVE') {
+        res.status(200).json({
+          success: true,
+          alreadyPaid: true,
+          status: 'PAID_ACTIVE',
+          message: 'Consultation is already in active paid status',
+        });
+        return;
+      }
+    }
+
+    // 2. Fetch server-calculated quote based on expert rates
     const quote = await billingService.preparePaidQuote({
       consultationId: id,
-      consultationType: (type || 'VIDEO').toUpperCase() as any,
+      consultationType: (type || 'CHAT').toUpperCase() as any,
       consumerId,
     });
 
-    // 2. Initial paid increment: 5-minute pre-authorized deposit
+    // 3. Duplicate protection: Check if there's an existing PENDING PaymentTransaction created in the last 15 minutes
+    const existingPendingTx = await prisma.paymentTransaction.findFirst({
+      where: {
+        consumerId,
+        paymentType: 'CONSULTATION_PAID_CONTINUATION',
+        status: 'PENDING',
+        providerPaymentIntentId: { not: null },
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingPendingTx && existingPendingTx.providerPaymentIntentId) {
+      try {
+        const paymentProvider = getPaymentProvider();
+        const existingPi = await paymentProvider.retrievePaymentIntent(existingPendingTx.providerPaymentIntentId);
+        if (
+          existingPi &&
+          (existingPi.status === 'requires_payment_method' ||
+            existingPi.status === 'requires_confirmation' ||
+            existingPi.status === 'requires_action')
+        ) {
+          res.json({
+            success: true,
+            paymentIntentId: existingPendingTx.providerPaymentIntentId,
+            clientSecret: (existingPi as any).clientSecret || '',
+            amountMinorUnits: existingPendingTx.amountMinorUnits,
+            currency: existingPendingTx.currency,
+            rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+            freeSecondsPreserved: 60,
+            autoChargedAtExpiry: false,
+            message: 'Existing pending PaymentIntent reused',
+          });
+          return;
+        }
+      } catch (e) {
+        // If retrieving failed, proceed to create fresh intent
+      }
+    }
+
+    // 4. Initial paid increment: 5-minute pre-authorized deposit
     const amountMinorUnits = quote.rateMinorUnitsPerMinute * 5;
     const idempotencyKey = `pi_consult_${id}_${consumerId}_${Date.now()}`;
     const paymentProvider = getPaymentProvider();
 
-    // 3. Create PaymentIntent via payment provider
+    // 5. Create PaymentIntent via payment provider
     const piResult = await paymentProvider.createPaymentIntent({
       amountMinorUnits,
       currency: quote.currency.toLowerCase(),
@@ -307,6 +362,7 @@ router.post('/consultations/:id/create-payment-intent', async (req: Request, res
       metadata: {
         type: 'CONSULTATION_PAID_CONTINUATION',
         consultationId: id,
+        consultationType: type,
         consumerId,
         expertId: quote.expertId,
         rateMinorUnitsPerMinute: String(quote.rateMinorUnitsPerMinute),
@@ -314,6 +370,31 @@ router.post('/consultations/:id/create-payment-intent', async (req: Request, res
       },
       idempotencyKey,
     });
+
+    // 6. Record PaymentTransaction with status PENDING so webhook & confirmation endpoints can track it!
+    await prisma.paymentTransaction.create({
+      data: {
+        idempotencyKey: `tx_${piResult.paymentIntentId}`,
+        consumerId,
+        expertId: quote.expertId,
+        paymentType: 'CONSULTATION_PAID_CONTINUATION',
+        amountMinorUnits,
+        currency: quote.currency,
+        provider: paymentProvider.isMock ? 'MOCK' : 'STRIPE',
+        providerPaymentIntentId: piResult.paymentIntentId,
+        status: 'PENDING',
+      },
+    });
+
+    // 7. Broadcast payment pending to consultation room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`consultation_${id}`).to(`chat_${id}`).emit('chat:payment_pending', {
+        chatId: id,
+        consultationId: id,
+        status: 'PAYMENT_PENDING',
+      });
+    }
 
     res.json({
       success: true,
@@ -329,6 +410,134 @@ router.post('/consultations/:id/create-payment-intent', async (req: Request, res
   } catch (error: any) {
     console.error('Error creating consultation payment intent:', error);
     res.status(400).json({ error: error.message || 'Failed to create consultation payment intent' });
+  }
+});
+
+/**
+ * Customer confirms successful payment intent and activates paid continuation
+ */
+router.post('/consultations/:id/confirm-payment', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { paymentIntentId, type = 'CHAT' } = req.body;
+    const consumerId = req.user!.id;
+
+    if (!paymentIntentId) {
+      res.status(400).json({ error: 'paymentIntentId is required' });
+      return;
+    }
+
+    const provider = getPaymentProvider();
+    let isSucceeded = false;
+
+    if (provider.isMock) {
+      isSucceeded = true;
+    } else {
+      const pi = await provider.retrievePaymentIntent(paymentIntentId);
+      if (pi.status === 'succeeded' || pi.status === 'requires_confirmation' || pi.status === 'requires_capture') {
+        isSucceeded = true;
+      } else {
+        res.status(400).json({
+          error: `PaymentIntent status is ${pi.status}, not succeeded.`,
+          status: pi.status,
+        });
+        return;
+      }
+    }
+
+    // Update PaymentTransaction to CAPTURED
+    const tx = await prisma.paymentTransaction.findFirst({
+      where: { providerPaymentIntentId: paymentIntentId },
+    });
+
+    if (tx) {
+      await prisma.paymentTransaction.update({
+        where: { id: tx.id },
+        data: { status: 'CAPTURED' },
+      });
+    }
+
+    // Fetch quote to get rate
+    const quote = await billingService.preparePaidQuote({
+      consultationId: id,
+      consultationType: (type || 'CHAT').toUpperCase() as any,
+      consumerId,
+    });
+
+    const commissionPct = await billingService.getPlatformCommissionPct();
+    const billingIdempotencyKey = `bill_sess_${type.toLowerCase()}_${id}`;
+    const now = new Date();
+
+    await prisma.consultationBillingSession.upsert({
+      where: { idempotencyKey: billingIdempotencyKey },
+      update: {
+        status: 'PAID_ACTIVE',
+        paidConfirmedAt: now,
+        paidStartedAt: now,
+        rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+        currency: quote.currency,
+        commissionPct,
+      },
+      create: {
+        idempotencyKey: billingIdempotencyKey,
+        consultationType: type.toUpperCase() as any,
+        chatId: type === 'CHAT' ? id : undefined,
+        callSessionId: type !== 'CHAT' ? id : undefined,
+        consumerId,
+        expertId: quote.expertId,
+        currency: quote.currency,
+        rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+        status: 'PAID_ACTIVE',
+        freeSecondsUsed: 60,
+        paidConfirmedAt: now,
+        paidStartedAt: now,
+        commissionPct,
+      },
+    });
+
+    // Update ConsultationChat
+    if (type === 'CHAT') {
+      await prisma.consultationChat.update({
+        where: { id },
+        data: {
+          extendedPaid: true,
+          isFreeExpired: false,
+          status: 'PAID_ACTIVE',
+        },
+      });
+
+      const timer = chatTimerService.getTimerState(id);
+      if (timer) {
+        timer.extendedPaid = true;
+        timer.isFreeExpired = false;
+      }
+    }
+
+    // Broadcast socket event to both rooms
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`consultation_${id}`).to(`chat_${id}`).emit('chat:paid_continuation_activated', {
+        chatId: id,
+        consultationId: id,
+        consultationType: type,
+        status: 'PAID_ACTIVE',
+        rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+        currency: quote.currency,
+        currencySymbol: quote.currencySymbol,
+        paidStartedAt: now.toISOString(),
+      });
+    }
+
+    res.json({
+      success: true,
+      status: 'PAID_ACTIVE',
+      rateMinorUnitsPerMinute: quote.rateMinorUnitsPerMinute,
+      currency: quote.currency,
+      message: 'Paid consultation continuation activated successfully',
+    });
+  } catch (error: any) {
+    console.error('Error confirming payment:', error);
+    res.status(400).json({ error: error.message || 'Failed to confirm consultation payment' });
   }
 });
 
